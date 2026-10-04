@@ -23,12 +23,19 @@ export interface Cargo {
    * Ordem de exibição na navegação (menor = mais "principal").
    */
   readonly ordem: number;
+  /**
+   * Vagas em disputa nesta eleição (por UF/Brasil). Cargos majoritários elegem
+   * 1 (Presidente, Governador) ou 2 (Senador, que renova dois terços em 2026).
+   * Cargos proporcionais dependem do quociente eleitoral e variam por UF, por
+   * isso não têm valor fixo.
+   */
+  readonly vagas?: number;
 }
 
 export const CARGOS: readonly Cargo[] = [
-  { codigo: 1, nome: "Presidente", curto: "Presidente", abrangencia: "federal", porUf: false, majoritario: true, ordem: 0 },
-  { codigo: 3, nome: "Governador", curto: "Governador", abrangencia: "estadual", porUf: true, majoritario: true, ordem: 1 },
-  { codigo: 5, nome: "Senador", curto: "Senador", abrangencia: "estadual", porUf: true, majoritario: true, ordem: 2 },
+  { codigo: 1, nome: "Presidente", curto: "Presidente", abrangencia: "federal", porUf: false, majoritario: true, ordem: 0, vagas: 1 },
+  { codigo: 3, nome: "Governador", curto: "Governador", abrangencia: "estadual", porUf: true, majoritario: true, ordem: 1, vagas: 1 },
+  { codigo: 5, nome: "Senador", curto: "Senador", abrangencia: "estadual", porUf: true, majoritario: true, ordem: 2, vagas: 2 },
   { codigo: 6, nome: "Deputado Federal", curto: "Dep. Federal", abrangencia: "estadual", porUf: true, majoritario: false, ordem: 3 },
   { codigo: 7, nome: "Deputado Estadual", curto: "Dep. Estadual", abrangencia: "estadual", porUf: true, majoritario: false, ordem: 4 },
   { codigo: 8, nome: "Deputado Distrital", curto: "Dep. Distrital", abrangencia: "distrital", porUf: true, majoritario: false, ordem: 5 },
@@ -38,6 +45,15 @@ const CARGO_BY_CODIGO = new Map(CARGOS.map((c) => [c.codigo, c]));
 
 export function getCargo(codigo: number | string): Cargo | undefined {
   return CARGO_BY_CODIGO.get(Number(codigo));
+}
+
+/**
+ * Quantos primeiros colocados devem aparecer em destaque no placar de um cargo
+ * (o número de vagas em disputa). Cargos proporcionais não têm vaga única
+ * (dependem do quociente eleitoral), então destacamos apenas o líder.
+ */
+export function destaquesDoCargo(codigo: number | string): number {
+  return getCargo(codigo)?.vagas ?? 1;
 }
 
 /** Cargos disponíveis em uma determinada UF (DF tem Dep. Distrital; demais não). */

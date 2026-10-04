@@ -1,4 +1,5 @@
 import type { Cargo } from "@apuracao/shared";
+import { destaquesDoCargo } from "@apuracao/shared";
 import type { RaceResult } from "@apuracao/domain";
 import { CandidateBar } from "@/components/candidate-bar";
 import { CandidatesTable } from "@/components/candidates-table";
@@ -15,6 +16,8 @@ export function RaceBoard({
 }) {
   const majoritario = cargo.majoritario;
   const maxVotos = race.candidatos[0]?.votos ?? 0;
+  // Senador renova 2 vagas por estado em 2026: os dois primeiros em destaque.
+  const destaques = destaquesDoCargo(cargo.codigo);
 
   if (majoritario) {
     return (
@@ -31,7 +34,7 @@ export function RaceBoard({
               key={c.numero + c.nome}
               candidato={c}
               maxVotos={maxVotos}
-              destaque={i === 0 && maxVotos > 0}
+              destaque={i < destaques && maxVotos > 0}
             />
           ))}
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { destaquesDoCargo } from "@apuracao/shared";
 import type { RaceSummary } from "@apuracao/domain";
 import { useResultado } from "@/lib/queries";
 import { CandidateRow } from "@/components/candidate-row";
@@ -43,6 +44,8 @@ export function RaceMiniCard({
   const race = resultado.data;
   const candidatos = race?.candidatos.slice(0, topN) ?? [];
   const maxVotos = race?.candidatos[0]?.votos ?? 0;
+  // Senador destaca os 2 primeiros (2 vagas por estado em 2026); demais, 1.
+  const destaques = destaquesDoCargo(corrida.cargo);
   const percentual = race?.secoes.percentualTotalizadas ?? resumo?.percentualApurado ?? 0;
   const finalizado = race?.totalizacaoFinal ?? resumo?.totalizacaoFinal ?? false;
   const aguardandoColeta = resultado.isError && !race && !resumo;
@@ -90,7 +93,7 @@ export function RaceMiniCard({
               <CandidateRow
                 key={c.numero + c.nome}
                 candidato={c}
-                destaque={i === 0 && maxVotos > 0}
+                destaque={i < destaques && maxVotos > 0}
                 className="py-2 first:pt-0 last:pb-0"
               />
             ))}
