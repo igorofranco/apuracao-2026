@@ -138,14 +138,20 @@ function monitorar(page: Page, opts: { permitir404?: boolean } = {}): string[] {
 }
 
 async function semOverflowHorizontal(page: Page): Promise<void> {
-  const { scrollW, innerW } = await page.evaluate(() => ({
+  const { scrollW, clientW, visualW } = await page.evaluate(() => ({
     scrollW: document.documentElement.scrollWidth,
-    innerW: window.innerWidth,
+    clientW: document.documentElement.clientWidth,
+    visualW: Math.round(
+      window.visualViewport?.width ?? document.documentElement.clientWidth,
+    ),
   }));
+  // No mobile o window.innerWidth pode crescer junto com o conteúdo; a
+  // referência correta é a largura visível (clientWidth/visualViewport).
+  const larguraVisivel = Math.min(clientW, visualW);
   expect(
     scrollW,
-    `overflow horizontal: scrollWidth=${scrollW} > innerWidth=${innerW}`,
-  ).toBeLessThanOrEqual(innerW + 2);
+    `overflow horizontal: scrollWidth=${scrollW} > largura visível=${larguraVisivel}`,
+  ).toBeLessThanOrEqual(larguraVisivel + 1);
 }
 
 /** Garante que nenhum rótulo de eixo do Recharts seja cortado pelo SVG. */
@@ -194,9 +200,9 @@ test.describe("páginas", () => {
       }
       if (p.aoVivo) {
         // Só aparece "Ao vivo" quando a SSE conectou via proxy do Next.
-        await expect(page.getByText("Ao vivo").first()).toBeVisible({
-          timeout: 20_000,
-        });
+        await expect(
+          page.getByText("Ao vivo").filter({ visible: true }).first(),
+        ).toBeVisible({ timeout: 20_000 });
       }
       if (p.tabela) {
         // Em telas pequenas a tabela dá lugar a uma lista, sem colunas cortadas.
@@ -240,7 +246,9 @@ test.describe("interações", () => {
     const erros = monitorar(page);
 
     await page.goto("/uf/sp", { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Ao vivo").first()).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByText("Ao vivo").filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole("button", { name: "Senador" }).click();
     await expect(page).toHaveURL(/cargo=5/);
