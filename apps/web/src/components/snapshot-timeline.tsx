@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import type { Snapshot } from "@apuracao/domain";
 import { Card } from "@/components/ui";
-import { formatHora, formatInt, formatPercent } from "@/lib/format";
+import { formatCompact, formatHora, formatInt, formatPercent } from "@/lib/format";
 
 export function SnapshotTimeline({ snapshots }: { snapshots: Snapshot[] }) {
   const data = snapshots.map((s) => ({
@@ -44,7 +44,7 @@ export function SnapshotTimeline({ snapshots }: { snapshots: Snapshot[] }) {
               yAxisId="validos"
               stroke="var(--muted-foreground)"
               fontSize={11}
-              tickFormatter={(v: number) => formatInt(v)}
+              tickFormatter={(v: number) => formatCompact(v)}
             />
             <YAxis
               yAxisId="apurado"
