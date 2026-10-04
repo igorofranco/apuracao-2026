@@ -171,7 +171,10 @@ export function normalizeResultado(raw: RawResultado): RaceResult {
 
 /** Resumo de uma corrida para o painel inicial. */
 export function summarizeRace(race: RaceResult): RaceSummary {
-  const lider = race.candidatos[0];
+  const primeiro = race.candidatos[0];
+  // Só existe "liderança" quando há votos computados. Antes disso, a ordem é
+  // apenas a ordem do arquivo do TSE e não representa posição nenhuma.
+  const lider = primeiro && primeiro.votos > 0 ? primeiro : undefined;
   return {
     eleicao: race.eleicao,
     cargo: race.cargo,

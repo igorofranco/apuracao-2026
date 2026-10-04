@@ -30,8 +30,16 @@ describe("normalizeResultado", () => {
     expect(race.eleitorado.total).toBe(158745502);
   });
 
-  it("preenche o resumo com o líder", () => {
+  it("não define liderança quando não há votos computados", () => {
     const resumo = summarizeRace(race);
+    expect(resumo.lider).toBeNull();
+  });
+
+  it("define liderança quando há votos computados", () => {
+    const comVotos = structuredClone(race);
+    comVotos.secoes.totalizadas = 1000;
+    comVotos.candidatos[0]!.votos = 1234;
+    const resumo = summarizeRace(comVotos);
     expect(resumo.lider?.nomeUrna).toBe("FLAVIO BOLSONARO");
     expect(resumo.lider?.partido).toBe("PL");
   });

@@ -48,8 +48,9 @@ export default function HomePage() {
     [porChave],
   );
 
-  const lider = presidente.data?.candidatos[0];
+  const lider = presResumo?.lider ?? null;
   const maxVotos = presidente.data?.candidatos[0]?.votos ?? 0;
+  const apuracaoIniciada = maxVotos > 0;
   const cargoPres = getCargo(1);
 
   return (
@@ -109,7 +110,9 @@ export default function HomePage() {
         <Card className="lg:col-span-2 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Disputa presidencial</h2>
-            <span className="text-xs text-muted-foreground">Top candidatos</span>
+            <span className="text-xs text-muted-foreground">
+              {apuracaoIniciada ? "Top candidatos" : "Aguardando votos"}
+            </span>
           </div>
           {presidente.isLoading ? (
             <div className="space-y-3">
@@ -124,7 +127,7 @@ export default function HomePage() {
                   key={c.numero + c.nome}
                   candidato={c}
                   maxVotos={maxVotos}
-                  destaque={i === 0}
+                  destaque={i === 0 && apuracaoIniciada}
                 />
               ))}
             </div>

@@ -29,7 +29,12 @@ export function RaceBoard({
         </div>
         <div className="space-y-4">
           {race.candidatos.slice(0, maxBarras).map((c, i) => (
-            <CandidateBar key={c.numero + c.nome} candidato={c} maxVotos={maxVotos} destaque={i === 0} />
+            <CandidateBar
+              key={c.numero + c.nome}
+              candidato={c}
+              maxVotos={maxVotos}
+              destaque={i === 0 && maxVotos > 0}
+            />
           ))}
         </div>
       </Card>
