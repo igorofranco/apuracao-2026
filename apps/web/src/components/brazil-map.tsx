@@ -7,7 +7,8 @@ import { UFS, getUf } from "@apuracao/shared";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/format";
 import { corPartido, siglaCanonica } from "@/lib/partidos";
-import { MapLegend } from "@/components/map-legend";
+import { corApuracao } from "@/lib/mapa";
+import { ApuracaoMapLegend, MapLegend } from "@/components/map-legend";
 
 export interface MapaDado {
   uf: string;
@@ -21,6 +22,7 @@ export interface MapaDado {
 }
 
 type Modo = "apuracao" | "lideranca";
+type Escala = "absoluto" | "relativo";
 
 interface Feature {
   type: "Feature";
@@ -37,22 +39,15 @@ const VIEW = 760;
 /** Código IBGE -> sigla da UF (para casar as features do GeoJSON). */
 const UF_POR_IBGE = new Map(UFS.map((u) => [u.codigoIbge, u.uf]));
 
-function corApuracao(pct: number): string {
-  const t = Math.max(0, Math.min(1, pct / 100));
-  // de cinza-azulado para verde.
-  const from = [226, 230, 238];
-  const to = [34, 201, 138];
-  const c = from.map((f, i) => Math.round(f + (to[i]! - f) * t));
-  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-}
-
 export function BrazilMap({
   dados,
   modo = "lideranca",
+  escala = "absoluto",
   className,
 }: {
   dados: MapaDado[];
   modo?: Modo;
+  escala?: Escala;
   className?: string;
 }) {
   const router = useRouter();
@@ -79,6 +74,12 @@ export function BrazilMap({
     return m;
   }, [dados]);
 
+  // Estado mais apurado — referência da escala relativa.
+  const maxPercentual = useMemo(
+    () => Math.max(0, ...dados.map((d) => d.percentual)),
+    [dados],
+  );
+
   const paths = useMemo(() => {
     if (!geo) return [];
     const projection = geoMercator().fitSize([VIEW, VIEW], geo as unknown as GeoPermissibleObjects);
@@ -91,7 +92,10 @@ export function BrazilMap({
 
   const cor = (d: MapaDado | undefined): string => {
     if (!d) return "var(--muted)";
-    if (modo === "apuracao") return corApuracao(d.percentual);
+    if (modo === "apuracao") {
+      const referencia = escala === "relativo" ? maxPercentual : 100;
+      return corApuracao(referencia > 0 ? (d.percentual / referencia) * 100 : 0);
+    }
     if (d.lider?.siglaPartido) return corPartido(d.lider.siglaPartido);
     return "var(--muted)";
   };
@@ -195,7 +199,11 @@ export function BrazilMap({
         ) : null}
       </div>
 
-      {modo === "lideranca" ? <MapLegend siglas={partidos} /> : null}
+      {modo === "lideranca" ? (
+        <MapLegend siglas={partidos} />
+      ) : (
+        <ApuracaoMapLegend escala={escala} maxPercentual={maxPercentual} />
+      )}
     </div>
   );
 }

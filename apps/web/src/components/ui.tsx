@@ -65,6 +65,50 @@ export function buttonClass(variant: ButtonVariant = "primary", className?: stri
   );
 }
 
+/* ---------------------------- Segmented control --------------------------- */
+
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  label,
+  className,
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  options: readonly { value: T; label: ReactNode }[];
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(
+        "inline-flex rounded-lg border border-border bg-muted/50 p-0.5",
+        className,
+      )}
+    >
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            "rounded-md px-2.5 py-1 text-xs font-medium transition",
+            value === o.value
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* -------------------------------- Progress -------------------------------- */
 
 export function Progress({

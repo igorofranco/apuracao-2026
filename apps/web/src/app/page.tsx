@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ELEICAO_2026, UFS, getCargo } from "@apuracao/shared";
 import { useResumo, useResultado } from "@/lib/queries";
@@ -9,7 +9,7 @@ import { CandidateBar } from "@/components/candidate-bar";
 import { NumeroBadge } from "@/components/numero-badge";
 import { BrazilMap, type MapaDado } from "@/components/brazil-map";
 import { MeuPainel } from "@/components/meu-painel";
-import { Card, Progress, Skeleton } from "@/components/ui";
+import { Card, Progress, Segmented, Skeleton } from "@/components/ui";
 import { formatDateTime, formatPercent } from "@/lib/format";
 
 export default function HomePage() {
@@ -19,6 +19,9 @@ export default function HomePage() {
     cargo: 1,
     uf: "br",
   });
+
+  const [mapaModo, setMapaModo] = useState<"lideranca" | "apuracao">("lideranca");
+  const [mapaEscala, setMapaEscala] = useState<"absoluto" | "relativo">("absoluto");
 
   const corridas = resumo.data?.corridas ?? [];
 
@@ -154,13 +157,37 @@ export default function HomePage() {
       {/* Mapa */}
       <section className="grid gap-4 lg:grid-cols-5">
         <Card className="min-w-0 lg:col-span-3 p-5">
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Governadores por estado</h2>
-            <span className="text-xs text-muted-foreground">
-              cor = partido do líder
-            </span>
+            <Segmented
+              value={mapaModo}
+              onChange={setMapaModo}
+              label="Tipo de mapa"
+              options={[
+                { value: "lideranca", label: "Liderança" },
+                { value: "apuracao", label: "Apuração" },
+              ]}
+            />
           </div>
-          <BrazilMap dados={mapaDados} modo="lideranca" />
+          {mapaModo === "lideranca" ? (
+            <p className="mb-1 text-xs text-muted-foreground">cor = partido do líder</p>
+          ) : (
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                cor = percentual de urnas apuradas
+              </p>
+              <Segmented
+                value={mapaEscala}
+                onChange={setMapaEscala}
+                label="Escala do mapa de apuração"
+                options={[
+                  { value: "absoluto", label: "Absoluto" },
+                  { value: "relativo", label: "Relativo" },
+                ]}
+              />
+            </div>
+          )}
+          <BrazilMap dados={mapaDados} modo={mapaModo} escala={mapaEscala} />
         </Card>
 
         <Card className="flex min-w-0 flex-col lg:col-span-2 p-5">

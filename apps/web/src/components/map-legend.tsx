@@ -1,6 +1,8 @@
 "use client";
 
 import { corPartido, nomePartido } from "@/lib/partidos";
+import { corApuracao } from "@/lib/mapa";
+import { formatPercent } from "@/lib/format";
 
 /**
  * Legenda simplificada do mapa: lista apenas os partidos que de fato aparecem
@@ -31,6 +33,43 @@ export function MapLegend({ siglas }: { siglas: string[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Legenda do mapa de apuração: rampa de cor do menos ao mais apurado.
+ * No modo absoluto o topo é sempre 100%; no relativo, o estado mais apurado.
+ */
+export function ApuracaoMapLegend({
+  escala,
+  maxPercentual,
+}: {
+  escala: "absoluto" | "relativo";
+  maxPercentual: number;
+}) {
+  const fim = escala === "absoluto" ? "100%" : formatPercent(maxPercentual, 0);
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Legenda · {escala === "absoluto" ? "escala absoluta" : "escala relativa"}
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="tabular">0%</span>
+        <div
+          className="h-2 flex-1 rounded-full"
+          style={{
+            background: `linear-gradient(to right, ${corApuracao(0)}, ${corApuracao(100)})`,
+          }}
+          aria-hidden
+        />
+        <span className="tabular">{fim}</span>
+      </div>
+      <p className="mt-1.5 text-xs text-muted-foreground">
+        {escala === "absoluto"
+          ? "Cor proporcional ao percentual de urnas apuradas (0–100%)."
+          : "Cor proporcional ao estado mais apurado."}
+      </p>
     </div>
   );
 }
