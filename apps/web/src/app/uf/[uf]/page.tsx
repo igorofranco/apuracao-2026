@@ -128,10 +128,10 @@ function UfContent() {
         <Skeleton className="h-80 w-full" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <RaceBoard race={race.data} cargo={cargoAtivo} />
           </div>
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <TurnoutPanel race={race.data} />
             {historico.data?.snapshots && historico.data.snapshots.length > 1 ? (
               <SnapshotTimeline snapshots={historico.data.snapshots} />
@@ -167,7 +167,7 @@ function UfContent() {
               <Link
                 key={m.cd}
                 href={`/uf/${uf}/${m.cd}?cargo=${cargoAtivo?.codigo ?? 3}`}
-                className="truncate rounded-lg border border-border bg-card px-3 py-2 text-sm transition hover:border-primary/50"
+                className="min-w-0 truncate rounded-lg border border-border bg-card px-3 py-2 text-sm transition hover:border-primary/50"
               >
                 {m.nome}
               </Link>

@@ -14,8 +14,8 @@ export function CandidateBar({
   const largura = maxVotos > 0 ? (candidato.votos / maxVotos) * 100 : 0;
   return (
     <div className="space-y-1">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <span
             className={cn(
               "tabular inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-semibold",
@@ -24,7 +24,9 @@ export function CandidateBar({
           >
             {candidato.numero}
           </span>
-          <span className="truncate text-sm font-medium">{candidato.nomeUrna}</span>
+          <span className="min-w-0 truncate text-sm font-medium">
+            {candidato.nomeUrna}
+          </span>
           <span className="shrink-0 text-xs text-muted-foreground">
             {candidato.siglaPartido}
           </span>
@@ -34,9 +36,12 @@ export function CandidateBar({
             </span>
           ) : null}
         </div>
-        <div className="tabular shrink-0 text-right text-sm">
+        {/* Em telas pequenas os votos descem para uma segunda linha. */}
+        <div className="tabular w-full shrink-0 text-right text-sm sm:w-auto">
           <span className="font-semibold">{formatInt(candidato.votos)}</span>
-          <span className="ml-2 text-muted-foreground">{formatPercent(candidato.percentual)}</span>
+          <span className="ml-2 text-muted-foreground">
+            {formatPercent(candidato.percentual)}
+          </span>
         </div>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-muted">

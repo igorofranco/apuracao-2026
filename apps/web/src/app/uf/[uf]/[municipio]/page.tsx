@@ -128,10 +128,10 @@ function MunicipioContent() {
           </Card>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
+            <div className="min-w-0 lg:col-span-2">
               <RaceBoard race={race.data} cargo={cargoAtivo} />
             </div>
-            <div className="space-y-4">
+            <div className="min-w-0 space-y-4">
               <TurnoutPanel race={race.data} />
               {municipioInfo?.zonas?.length ? (
                 <Card className="p-4">

@@ -47,7 +47,9 @@ export function SiteHeader() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
-          <LiveBadge className="hidden sm:inline-flex" />
+          <span className="hidden sm:inline-flex">
+            <LiveBadge />
+          </span>
           <button
             type="button"
             onClick={toggle}

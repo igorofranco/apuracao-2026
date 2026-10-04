@@ -20,7 +20,7 @@ export function RaceBoard({
 
   if (majoritario) {
     return (
-      <Card className="p-5">
+      <Card className="min-w-0 p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{cargo.nome}</h2>
           <span className="text-xs text-muted-foreground">
@@ -42,7 +42,7 @@ export function RaceBoard({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{cargo.nome}</h2>
         <span className="text-xs text-muted-foreground">

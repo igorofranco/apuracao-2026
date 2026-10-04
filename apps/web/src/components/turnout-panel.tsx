@@ -9,7 +9,7 @@ export function TurnoutPanel({ race }: { race: RaceResult }) {
     eleitorado.total > 0 ? (abstencoes / eleitorado.total) * 100 : 0;
 
   return (
-    <Card className="p-4">
+    <Card className="min-w-0 p-4">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Apuração

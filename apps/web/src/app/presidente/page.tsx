@@ -60,10 +60,10 @@ export default function PresidentePage() {
         <Skeleton className="h-80 w-full" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <RaceBoard race={race.data} cargo={cargo!} maxBarras={12} />
           </div>
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <TurnoutPanel race={race.data} />
             {historico.data?.snapshots && historico.data.snapshots.length > 1 ? (
               <SnapshotTimeline snapshots={historico.data.snapshots} />

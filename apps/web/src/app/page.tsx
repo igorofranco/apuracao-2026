@@ -77,7 +77,7 @@ export default function HomePage() {
 
       {/* Presidente */}
       <section className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-1 p-5">
+        <Card className="min-w-0 lg:col-span-1 p-5">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">{cargoPres?.nome}</h2>
             <span className="tabular text-2xl font-bold">
@@ -95,7 +95,7 @@ export default function HomePage() {
                 <span className="tabular inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-primary px-2 text-sm font-semibold text-primary-foreground">
                   {lider.numero}
                 </span>
-                <span className="font-semibold">{lider.nomeUrna}</span>
+                <span className="min-w-0 truncate font-semibold">{lider.nomeUrna}</span>
                 <span className="ml-auto tabular font-semibold">
                   {formatPercent(lider.percentual)}
                 </span>
@@ -114,7 +114,7 @@ export default function HomePage() {
           </Link>
         </Card>
 
-        <Card className="lg:col-span-2 p-5">
+        <Card className="min-w-0 lg:col-span-2 p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Disputa presidencial</h2>
             <span className="text-xs text-muted-foreground">
@@ -146,7 +146,7 @@ export default function HomePage() {
 
       {/* Mapa */}
       <section className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3 p-5">
+        <Card className="min-w-0 lg:col-span-3 p-5">
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Governadores por estado</h2>
             <span className="text-xs text-muted-foreground">
@@ -156,7 +156,7 @@ export default function HomePage() {
           <BrazilMap dados={mapaDados} modo="lideranca" />
         </Card>
 
-        <Card className="lg:col-span-2 p-5">
+        <Card className="min-w-0 lg:col-span-2 p-5">
           <h2 className="mb-3 text-lg font-semibold">Andamento por estado</h2>
           {corridas.length === 0 ? (
             <Skeleton className="h-64 w-full" />
@@ -203,7 +203,7 @@ export default function HomePage() {
               <Link
                 key={u.uf}
                 href={`/uf/${u.uf}`}
-                className="rounded-xl border border-border bg-card p-3 transition hover:border-primary/50"
+                className="min-w-0 rounded-xl border border-border bg-card p-3 transition hover:border-primary/50"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold">{u.nome}</span>
