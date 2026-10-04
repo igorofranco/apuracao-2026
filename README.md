@@ -213,5 +213,7 @@ npm run check     # typecheck + lint + test
 - ✅ Painel com mapa do Brasil (por partido líder), ranking e andamento por estado.
 - ✅ Drill-down: UF → município → zona.
 - ✅ Tempo real via SSE; histórico e evolução temporal.
+- ✅ 2º turno: projeção **matemática** (quem já não pode ser alcançado) e marca
+  **oficial** do TSE, com os dois candidatos em destaque no placar.
 - ✅ Same-origin (proxy Next/nginx), rate limit, métricas, headers de segurança e 2º turno automático.
 - ⏭️ BU por seção (boletim de urna por seção).

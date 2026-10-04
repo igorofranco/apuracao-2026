@@ -2,19 +2,33 @@ import type { CandidateResult } from "@apuracao/domain";
 import { NumeroBadge } from "@/components/numero-badge";
 import { cn } from "@/lib/utils";
 import { formatInt, formatPercent } from "@/lib/format";
+import type { OrigemSegundoTurno } from "@/lib/segundo-turno";
 
 export function CandidateBar({
   candidato,
   maxVotos,
   destaque = false,
+  segundoTurno = null,
 }: {
   candidato: CandidateResult;
   maxVotos: number;
   destaque?: boolean;
+  /**
+   * Presente quando o candidato disputa o 2º turno (oficial ou matemático).
+   * Usado só para realçar a barra — o selo fica na faixa da seção.
+   */
+  segundoTurno?: OrigemSegundoTurno | null;
 }) {
   const largura = maxVotos > 0 ? (candidato.votos / maxVotos) * 100 : 0;
   return (
-    <div className="space-y-1" data-testid="candidate-bar">
+    <div
+      className={cn(
+        "space-y-1",
+        segundoTurno && "-mx-2 rounded-lg border border-info/30 bg-info/5 px-2 py-1.5",
+      )}
+      data-testid="candidate-bar"
+      data-segundo-turno={segundoTurno ?? undefined}
+    >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
           <NumeroBadge numero={candidato.numero} destaque={destaque} />

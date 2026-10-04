@@ -154,6 +154,8 @@ function makeCandidatos(cargo, chave) {
       posicao: i + 1,
       eleito,
       matematicamenteEleito: false,
+      matematicamenteSegundoTurno: false,
+      segundoTurnoOficial: false,
       situacao: eleito ? "Eleito" : i < (major ? 2 : 8) ? "Não eleito" : "Suplente",
       vice: major ? NOMES[(off + total + i) % NOMES.length].urna : null,
       suplentes: cargo === 5 ? [NOMES[(off + i * 2) % NOMES.length].urna] : [],

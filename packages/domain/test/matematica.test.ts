@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   computeEleicaoMatematica,
+  ehSegundoTurnoOficial,
   normalizeResultado,
   withEleicaoMatematica,
   type RaceResult,
@@ -40,6 +41,8 @@ function corrida(c: Cenario): RaceResult {
       posicao: i + 1,
       eleito: x.eleito,
       matematicamenteEleito: false,
+      matematicamenteSegundoTurno: false,
+      segundoTurnoOficial: false,
       situacao: null,
       vice: null,
       suplentes: [],
@@ -195,6 +198,68 @@ describe("computeEleicaoMatematica", () => {
     expect(r.estado).toBe("parcial");
     expect(r.numeros).toEqual(["1"]);
   });
+
+  it("Governador com maioria garantida não vai ao 2º turno", () => {
+    const r = computeEleicaoMatematica(
+      corrida({ cargo: 3, votos: [1000, 200, 50], secoesTotal: 1000, secoesTotalizadas: 990, validos: 1250 }),
+    );
+    expect(r.numeros).toEqual(["1"]);
+    expect(r.numerosSegundoTurno).toEqual([]);
+  });
+
+  it("Governador sem maioria define os dois do 2º turno", () => {
+    // 450 + 400 + 150 = 1000 válidos, tudo apurado; ninguém tem maioria, mas o
+    // 3º (150) não alcança os dois primeiros.
+    const r = computeEleicaoMatematica(
+      corrida({ cargo: 3, votos: [450, 400, 150], secoesTotal: 100, secoesTotalizadas: 100, validos: 1000 }),
+    );
+    expect(r.estado).toBe("indefinido");
+    expect(r.numeros).toEqual([]);
+    expect(r.numerosSegundoTurno).toEqual(["1", "2"]);
+  });
+
+  it("Governador: só o líder está garantido no 2º turno", () => {
+    // 400 + 380 + 380: o líder (400) está garantido; os dois seguintes empatam,
+    // então nenhum deles está individualmente garantido.
+    const r = computeEleicaoMatematica(
+      corrida({ cargo: 3, votos: [400, 380, 380], secoesTotal: 100, secoesTotalizadas: 100, validos: 1160 }),
+    );
+    expect(r.estado).toBe("indefinido");
+    expect(r.numeros).toEqual([]);
+    expect(r.numerosSegundoTurno).toEqual(["1"]);
+  });
+
+  it("Governador: corrida apertada ainda define o 2º turno", () => {
+    const r = computeEleicaoMatematica(
+      corrida({ cargo: 3, votos: [1000, 990, 0], secoesTotal: 1000, secoesTotalizadas: 990, validos: 1990 }),
+    );
+    expect(r.numeros).toEqual([]);
+    expect(r.numerosSegundoTurno).toEqual(["1", "2"]);
+  });
+
+  it("Senador não tem 2º turno", () => {
+    const r = computeEleicaoMatematica(
+      corrida({ cargo: 5, votos: [1000, 900, 100], secoesTotal: 1000, secoesTotalizadas: 990, validos: 2000 }),
+    );
+    expect(r.numeros).toEqual(["1", "2"]);
+    expect(r.numerosSegundoTurno).toEqual([]);
+  });
+});
+
+describe("ehSegundoTurnoOficial", () => {
+  it("reconhece a marca de 2º turno com variações", () => {
+    expect(ehSegundoTurnoOficial("2º turno")).toBe(true);
+    expect(ehSegundoTurnoOficial("2° TURNO")).toBe(true);
+    expect(ehSegundoTurnoOficial("Segundo turno")).toBe(true);
+  });
+
+  it("ignora situações que não são 2º turno", () => {
+    expect(ehSegundoTurnoOficial("Eleito")).toBe(false);
+    expect(ehSegundoTurnoOficial("Não eleito")).toBe(false);
+    expect(ehSegundoTurnoOficial("Suplente")).toBe(false);
+    expect(ehSegundoTurnoOficial(null)).toBe(false);
+    expect(ehSegundoTurnoOficial("")).toBe(false);
+  });
 });
 
 describe("withEleicaoMatematica", () => {
@@ -223,6 +288,23 @@ describe("withEleicaoMatematica", () => {
     expect(enriquecida.candidatos[0]?.matematicamenteEleito).toBe(true);
     expect(enriquecida.candidatos[0]?.votos).toBe(1000);
     expect(enriquecida.candidatos[1]?.matematicamenteEleito).toBe(false);
+  });
+
+  it("marca matematicamenteSegundoTurno nos dois candidatos", () => {
+    const base = corrida({
+      cargo: 3,
+      votos: [450, 400, 150],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1000,
+    });
+    const enriquecida = withEleicaoMatematica(base);
+    expect(enriquecida.candidatos.map((c) => c.matematicamenteSegundoTurno)).toEqual([
+      true,
+      true,
+      false,
+    ]);
+    expect(enriquecida.candidatos.every((c) => c.matematicamenteEleito === false)).toBe(true);
   });
 
   it("o fixture bruto do TSE já sai com o campo derivado", () => {

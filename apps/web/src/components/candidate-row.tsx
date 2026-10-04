@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui";
 import { MathBadge } from "@/components/math-badge";
 import { cn } from "@/lib/utils";
 import { formatInt, formatPercent } from "@/lib/format";
+import type { OrigemSegundoTurno } from "@/lib/segundo-turno";
 
 /**
  * Linha compacta de candidato no estilo da lista mobile (`CandidatesTable`):
@@ -12,16 +13,27 @@ import { formatInt, formatPercent } from "@/lib/format";
 export function CandidateRow({
   candidato,
   destaque = false,
+  segundoTurno = null,
   className,
 }: {
   candidato: CandidateResult;
   destaque?: boolean;
+  /**
+   * Presente quando o candidato disputa o 2º turno (oficial ou matemático).
+   * Usado só para realçar o número — o selo fica na faixa da seção.
+   */
+  segundoTurno?: OrigemSegundoTurno | null;
   className?: string;
 }) {
   return (
     <li
       data-testid="candidate-row"
-      className={cn("flex min-w-0 items-center gap-3", className)}
+      data-segundo-turno={segundoTurno ?? undefined}
+      className={cn(
+        "flex min-w-0 items-center gap-3",
+        segundoTurno && "-mx-2 rounded-lg bg-info/5 px-2",
+        className,
+      )}
     >
       <span
         className={cn(
@@ -32,7 +44,7 @@ export function CandidateRow({
         {candidato.numero}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{candidato.nomeUrna}</span>
           {candidato.eleito ? <Badge variant="success">Eleito</Badge> : null}
           {candidato.matematicamenteEleito ? (

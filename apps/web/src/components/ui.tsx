@@ -17,7 +17,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
 
 /* --------------------------------- Badge ---------------------------------- */
 
-type BadgeVariant = "default" | "outline" | "success" | "accent" | "danger" | "muted";
+type BadgeVariant = "default" | "outline" | "success" | "accent" | "danger" | "info" | "muted";
 
 const badgeVariants: Record<BadgeVariant, string> = {
   default: "bg-primary/15 text-primary border-primary/30",
@@ -25,6 +25,7 @@ const badgeVariants: Record<BadgeVariant, string> = {
   success: "bg-success/15 text-success border-success/30",
   accent: "bg-accent/20 text-accent-foreground border-accent/40 dark:text-accent",
   danger: "bg-danger/15 text-danger border-danger/30",
+  info: "bg-info/15 text-info border-info/30",
   muted: "bg-muted text-muted-foreground border-border",
 };
 

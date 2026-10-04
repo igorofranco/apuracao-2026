@@ -7,6 +7,7 @@ import { useResultado } from "@/lib/queries";
 import { CandidateRow } from "@/components/candidate-row";
 import { Card, Progress, Skeleton } from "@/components/ui";
 import { formatPercent } from "@/lib/format";
+import { origemSegundoTurnoCandidato } from "@/lib/segundo-turno";
 import {
   eleicaoDoCargo,
   hrefCorrida,
@@ -89,14 +90,18 @@ export function RaceMiniCard({
           </p>
         ) : candidatos.length > 0 ? (
           <ul className="divide-y divide-border">
-            {candidatos.map((c, i) => (
-              <CandidateRow
-                key={c.numero + c.nome}
-                candidato={c}
-                destaque={i < destaques && maxVotos > 0}
-                className="py-2 first:pt-0 last:pb-0"
-              />
-            ))}
+            {candidatos.map((c, i) => {
+              const origem = origemSegundoTurnoCandidato(c);
+              return (
+                <CandidateRow
+                  key={c.numero + c.nome}
+                  candidato={c}
+                  destaque={maxVotos > 0 && (i < destaques || origem !== null)}
+                  segundoTurno={origem}
+                  className="py-2 first:pt-0 last:pb-0"
+                />
+              );
+            })}
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">Apuração ainda não iniciada.</p>

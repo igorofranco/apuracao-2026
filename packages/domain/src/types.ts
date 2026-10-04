@@ -32,6 +32,17 @@ export interface CandidateResult {
    * mais votados (ver `computeEleicaoMatematica`). Calculado no coletor.
    */
   matematicamenteEleito: boolean;
+  /**
+   * Garantido no 2º turno por projeção matemática: cargo majoritário de vaga
+   * única (Presidente/Governador) em que o candidato já não pode ser ultrapassado
+   * pelo 3º colocado no pior cenário. Calculado no coletor.
+   */
+  matematicamenteSegundoTurno: boolean;
+  /**
+   * O TSE já marcou o candidato como disputante do 2º turno (campo `st`), após o
+   * encerramento do 1º turno sem vencedor por maioria.
+   */
+  segundoTurnoOficial: boolean;
   situacao: string | null;
   vice: string | null;
   suplentes: string[];

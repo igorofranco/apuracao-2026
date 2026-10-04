@@ -12,6 +12,7 @@ import type {
 } from "./types.ts";
 import type { RawResultado, RawMunicipioFile } from "./raw.ts";
 import { toBool, toNumber } from "./numbers.ts";
+import { ehSegundoTurnoOficial } from "./matematica.ts";
 
 /** "04/10/2026" + "17:30:00" -> ISO (America/Sao_Paulo). */
 export function parseDataHora(
@@ -123,6 +124,8 @@ function normalizeCandidatos(raw: RawResultado): CandidateResult[] {
           posicao: 0,
           eleito: toBool(cand.e),
           matematicamenteEleito: false,
+          matematicamenteSegundoTurno: false,
+          segundoTurnoOficial: ehSegundoTurnoOficial(cand.st),
           situacao: cand.st ?? null,
           vice: vice ? (vice.nmu ?? vice.nm ?? null) : null,
           suplentes,

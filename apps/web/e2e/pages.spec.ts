@@ -404,4 +404,33 @@ test.describe("interações", () => {
 
     expect(erros, erros.join("\n")).toEqual([]);
   });
+
+  test("destaca os dois candidatos do 2º turno (Governador SP)", async ({ page }, testInfo) => {
+    const erros = monitorar(page);
+
+    await page.goto("/uf/sp", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText("Ao vivo").filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // No cenário do mock o Governador não tem maioria, mas os dois primeiros já
+    // não podem ser alcançados: aparece a faixa e os dois ficam realçados.
+    await expect(page.getByTestId("segundo-turno")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("segundo-turno")).toHaveAttribute(
+      "data-origem",
+      "matematico",
+    );
+    // Os dois classificados ficam realçados; o selo é só da faixa da seção.
+    await expect(
+      page.locator('[data-testid="candidate-bar"][data-segundo-turno]'),
+    ).toHaveCount(2);
+
+    await semOverflowHorizontal(page);
+
+    const dir = `e2e/screenshots/${testInfo.project.name}`;
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({ path: `${dir}/uf-sp-segundo-turno.png`, fullPage: true });
+
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
 });
