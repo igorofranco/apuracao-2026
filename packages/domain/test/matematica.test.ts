@@ -208,8 +208,8 @@ describe("computeEleicaoMatematica", () => {
   });
 
   it("Governador sem maioria define os dois do 2º turno", () => {
-    // 450 + 400 + 150 = 1000 válidos, tudo apurado; ninguém tem maioria, mas o
-    // 3º (150) não alcança os dois primeiros.
+    // 450 + 400 + 150 = 1000 válidos, tudo apurado; ninguém tem maioria, o 3º
+    // (150) não alcança o 2º e o 1º (450) fica abaixo de 50% (500).
     const r = computeEleicaoMatematica(
       corrida({ cargo: 3, votos: [450, 400, 150], secoesTotal: 100, secoesTotalizadas: 100, validos: 1000 }),
     );
@@ -218,23 +218,65 @@ describe("computeEleicaoMatematica", () => {
     expect(r.numerosSegundoTurno).toEqual(["1", "2"]);
   });
 
-  it("Governador: só o líder está garantido no 2º turno", () => {
-    // 400 + 380 + 380: o líder (400) está garantido; os dois seguintes empatam,
-    // então nenhum deles está individualmente garantido.
+  it("Governador: não marca 2º turno se o 1º pode alcançar 50%+1", () => {
+    // 1 seção pendente de 10 votos (restantes = 10, metade = 5005). O 2º (3000)
+    // não é alcançado pelo 3º (2000), mas o 1º (5000) chega a 5010 no melhor
+    // cenário, acima de 50%+1: poderia fechar em 1º turno, então não é afirmado.
     const r = computeEleicaoMatematica(
-      corrida({ cargo: 3, votos: [400, 380, 380], secoesTotal: 100, secoesTotalizadas: 100, validos: 1160 }),
+      corrida({
+        cargo: 3,
+        votos: [5000, 3000, 2000],
+        secoesTotal: 1001,
+        secoesTotalizadas: 1000,
+        validos: 10000,
+      }),
     );
-    expect(r.estado).toBe("indefinido");
     expect(r.numeros).toEqual([]);
-    expect(r.numerosSegundoTurno).toEqual(["1"]);
+    expect(r.numerosSegundoTurno).toEqual([]);
+  });
+
+  it("Governador: não marca 2º turno se o 2º pode ser ultrapassado", () => {
+    // 380 + 310 + 310 = 1000: o 1º (380) está abaixo de 50% (500), mas o 3º
+    // empata com o 2º e pode ultrapassá-lo — a 2ª vaga não está garantida.
+    const r = computeEleicaoMatematica(
+      corrida({ cargo: 3, votos: [380, 310, 310], secoesTotal: 100, secoesTotalizadas: 100, validos: 1000 }),
+    );
+    expect(r.numeros).toEqual([]);
+    expect(r.numerosSegundoTurno).toEqual([]);
   });
 
   it("Governador: corrida apertada ainda define o 2º turno", () => {
+    // 1 seção pendente de 10 votos (restantes = 10, total projetado = 10010,
+    // metade = 5005). O 3º (4600) não alcança o 2º (4700) e o 1º (4800 + 10 =
+    // 4810) fica abaixo de 50%+1 — então os dois estão garantidos no 2º turno.
     const r = computeEleicaoMatematica(
-      corrida({ cargo: 3, votos: [1000, 990, 0], secoesTotal: 1000, secoesTotalizadas: 990, validos: 1990 }),
+      corrida({
+        cargo: 3,
+        votos: [4800, 4700, 4600],
+        secoesTotal: 1001,
+        secoesTotalizadas: 1000,
+        validos: 10000,
+      }),
     );
     expect(r.numeros).toEqual([]);
     expect(r.numerosSegundoTurno).toEqual(["1", "2"]);
+  });
+
+  it("Governador: 1º à beira de 50% não afirma o 2º turno", () => {
+    // Mesmo cenário (restantes = 10, metade = 5005), mas o 1º tem 5000: no
+    // melhor cenário chega a 5010 > 5005, podendo fechar em 1º turno. O 2º turno
+    // não é garantido, mesmo com o 2º inalcançável pelo 3º.
+    const r = computeEleicaoMatematica(
+      corrida({
+        cargo: 3,
+        votos: [5000, 3000, 2000],
+        secoesTotal: 1001,
+        secoesTotalizadas: 1000,
+        validos: 10000,
+      }),
+    );
+    expect(r.numeros).toEqual([]);
+    expect(r.numerosSegundoTurno).toEqual([]);
   });
 
   it("Senador não tem 2º turno", () => {

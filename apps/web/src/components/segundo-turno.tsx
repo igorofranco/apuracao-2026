@@ -4,7 +4,8 @@ import type { OrigemSegundoTurno, SegundoTurno } from "@/lib/segundo-turno";
 
 /**
  * Selo de 2º turno: `oficial` quando o TSE já marcou a situação do candidato;
- * `matematico` quando é projeção conservadora (o 3º colocado não alcança mais).
+ * `matematico` quando é projeção conservadora (o 3º colocado não alcança os dois
+ * primeiros e o 1º não chega a 50%+1).
  */
 export function SegundoTurnoBadge({
   origem,
@@ -22,7 +23,7 @@ export function SegundoTurnoBadge({
       title={
         oficial
           ? "2º turno confirmado pela totalização oficial do TSE"
-          : "Matematicamente no 2º turno: nem no pior cenário o 3º colocado alcança este candidato"
+          : "Matematicamente no 2º turno: o 3º colocado não alcança os dois primeiros e o 1º não obtém 50%+1"
       }
       className={className}
     >
@@ -52,7 +53,7 @@ export function SegundoTurnoBanner({ disputa }: { disputa: SegundoTurno }) {
         <span className="text-xs text-muted-foreground">
           {oficial
             ? "Disputa confirmada pelo TSE"
-            : "Ninguém mais alcança estes dois"}
+            : "O 3º não alcança estes dois e o 1º não faz 50%+1"}
         </span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">

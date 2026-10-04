@@ -31,10 +31,12 @@ export interface EleicaoMatematicaResultado {
   /** Números dos candidatos considerados matematicamente eleitos. */
   numeros: string[];
   /**
-   * Números dos candidatos garantidos no 2º turno (só cargos majoritários de
-   * vaga única: Presidente e Governador). Vazio quando o cargo não tem 2º
-   * turno, quando o pleito já está decidido no 1º turno ou quando ninguém está
-   * garantido ainda. Pode ter um ou dois nomes.
+   * Números dos dois candidatos garantidos no 2º turno (só cargos majoritários
+   * de vaga única: Presidente e Governador). `[]` quando o cargo não tem 2º
+   * turno ou quando a disputa ainda não está fechada. Para ser marcado, valem
+   * duas condições: ninguém ultrapassa o 2º colocado (`votos[1] > votos[2] +
+   * restantes`) **e** o 1º não alcança 50%+1 (`votos[0] + restantes <=
+   * totalProjetado / 2`).
    */
   numerosSegundoTurno: string[];
 }
@@ -84,14 +86,15 @@ export function ehSegundoTurnoOficial(
  *
  * Regras por tipo de cargo:
  * - **Vaga única** (Presidente/Governador): elege quem tiver a maioria absoluta
- *   dos votos válidos. Sem maioria garantida, calculamos também quem já está
- *   garantido no **2º turno** (os dois mais votados avançam): o 3º colocado, que
- *   no pior cenário recebe todos os votos restantes, não pode alcançá-lo.
+ *   dos votos válidos. Quando ninguém tem essa maioria garantida, mas (a) o 2º
+ *   colocado não pode ser ultrapassado pelo 3º e (b) o 1º colocado não alcança
+ *   50%+1 nem no melhor cenário, então os dois estão garantidos no **2º turno**.
  * - **Duas vagas** (Senador): os dois primeiros estão eleitos se o 3º não os
  *   alcançar; não há 2º turno para este cargo.
  *
- * Ex.: `vagas = 1` → maioria garantida se `votos[0] > totalProjetado / 2`; o
- * 2º turno do líder fica garantido se `votos[2] + restantes < votos[0]`.
+ * Ex.: `vagas = 1` → maioria garantida se `votos[0] > totalProjetado / 2`; o 2º
+ * turno é marcado se `votos[1] > votos[2] + restantes` **e**
+ * `votos[0] + restantes <= totalProjetado / 2`.
  * `vagas = 2` → o 2º colocado está seguro se `votos[2] + restantes < votos[1]`.
  */
 export function computeEleicaoMatematica(
@@ -157,18 +160,20 @@ export function computeEleicaoMatematica(
     const lider = votos[0] as number;
     if (lider > 0 && lider > totalProjetado / 2) {
       numeros.push(race.candidatos[0]!.numero);
-    } else {
-      // Sem maioria garantida, os dois mais votados vão ao 2º turno. O único
-      // adversário capaz de dar o salto é o 3º colocado (absorve todos os votos
-      // restantes no pior cenário); quem o supera já está no 2º turno.
-      const tetoSegundoTurno = (votos[2] ?? 0) + restantes;
-      const limite = Math.min(2, votos.length);
-      for (let p = 0; p < limite; p++) {
-        const v = votos[p] as number;
-        if (v > 0 && v > tetoSegundoTurno) {
-          const numero = race.candidatos[p]!.numero;
-          if (!numerosSegundoTurno.includes(numero)) numerosSegundoTurno.push(numero);
-        }
+    } else if (votos.length >= 3) {
+      // Sem vencedor garantido no 1º turno, o 2º turno só é afirmado quando as
+      // duas garantias valem:
+      //  1) posição: o 3º colocado, mesmo absorvendo todos os votos restantes,
+      //     não alcança o 2º (`votos[1] > votos[2] + restantes`);
+      //  2) 50%+1: nem no melhor cenário o 1º recebe a maioria absoluta
+      //     (`votos[0] + restantes <= totalProjetado / 2`).
+      const segundo = votos[1] as number;
+      const terceiro = votos[2] as number;
+      const segundoGarantido = segundo > terceiro + restantes;
+      const semMaioria = lider + restantes <= totalProjetado / 2;
+      if (segundoGarantido && semMaioria) {
+        numerosSegundoTurno.push(race.candidatos[0]!.numero);
+        numerosSegundoTurno.push(race.candidatos[1]!.numero);
       }
     }
   } else {

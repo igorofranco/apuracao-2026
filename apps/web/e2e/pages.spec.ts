@@ -413,8 +413,9 @@ test.describe("interações", () => {
       page.getByText("Ao vivo").filter({ visible: true }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    // No cenário do mock o Governador não tem maioria, mas os dois primeiros já
-    // não podem ser alcançados: aparece a faixa e os dois ficam realçados.
+    // No cenário do mock o Governador não tem maioria (líder bem abaixo de 50%)
+    // e os dois primeiros já não podem ser alcançados pelo 3º: aparece a faixa e
+    // os dois ficam realçados.
     await expect(page.getByTestId("segundo-turno")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("segundo-turno")).toHaveAttribute(
       "data-origem",
