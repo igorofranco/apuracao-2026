@@ -68,6 +68,13 @@ export default function HomePage() {
         <LiveBadge />
       </section>
 
+      {resumo.isError || presidente.isError ? (
+        <Card className="p-4 text-sm text-muted-foreground">
+          Não foi possível carregar os dados do TSE agora. O serviço de coleta pode estar
+          reiniciando — os números aparecem assim que a conexão for restabelecida.
+        </Card>
+      ) : null}
+
       {/* Presidente */}
       <section className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1 p-5">

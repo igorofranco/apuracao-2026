@@ -1,9 +1,12 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
-import { normalizeResultado } from "@apuracao/domain";
-import { CARGOS, ELEICAO_2026, UFS } from "@apuracao/shared";
+import rateLimit from "@fastify/rate-limit";
+import { CARGOS, UFS } from "@apuracao/shared";
 import type { TseClient } from "@apuracao/tse-client";
 import type { CollectorConfig } from "./config.ts";
+import type { EleicoesResolvidas } from "./eleicoes.ts";
+import type { LocalidadesCache } from "./localidades.ts";
+import type { Logger } from "./logger.ts";
 import type { MunicipiosCache } from "./municipios.ts";
 import type { Poller } from "./poller.ts";
 import type { RaceStore } from "./store.ts";
@@ -14,6 +17,9 @@ export interface ServerDeps {
   poller: Poller;
   client: TseClient;
   municipios: MunicipiosCache;
+  localidades: LocalidadesCache;
+  eleicoes: EleicoesResolvidas;
+  log: Logger;
   flags: { redis: boolean; postgres: boolean };
 }
 
@@ -27,16 +33,22 @@ function toInt(value: string | undefined, fallback: number): number {
 }
 
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, trustProxy: true });
 
-  await app.register(cors, {
-    origin: deps.config.corsOrigin === "*" ? true : deps.config.corsOrigin.split(","),
+  await app.register(cors, { origin: deps.config.corsOrigins });
+
+  await app.register(rateLimit, {
+    max: deps.config.rateLimit.max,
+    timeWindow: deps.config.rateLimit.windowMs,
+    allowList: [],
   });
+
+  const ssePorIp = new Map<string, number>();
 
   app.get("/health", async () => ({ ok: true }));
 
   app.get("/api/config", async () => ({
-    eleicao: ELEICAO_2026,
+    eleicao: deps.eleicoes,
     ufs: UFS,
     cargos: CARGOS,
   }));
@@ -46,41 +58,72 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     serverTime: new Date().toISOString(),
     corridas: deps.store.size,
     ultimaAtualizacao: deps.store.latestUpdate(),
+    eleicoes: deps.eleicoes,
     redis: deps.flags.redis,
     postgres: deps.flags.postgres,
+    localidadesEmCache: deps.localidades.tamanho,
+    sseClientes: [...ssePorIp.values()].reduce((a, b) => a + b, 0),
     poller: deps.poller.stats,
   }));
 
-  // Resumo de todas as corridas (painel inicial).
+  // Métricas em formato Prometheus (texto).
+  app.get("/api/metrics", async (_req, reply) => {
+    reply.header("content-type", "text/plain; version=0.0.4");
+    const s = deps.poller.stats;
+    const linhas = [
+      "# HELP apuracao_corridas Corridas na memória",
+      "# TYPE apuracao_corridas gauge",
+      `apuracao_corridas ${deps.store.size}`,
+      "# HELP apuracao_sse_clientes Conexões SSE ativas",
+      "# TYPE apuracao_sse_clientes gauge",
+      `apuracao_sse_clientes ${[...ssePorIp.values()].reduce((a, b) => a + b, 0)}`,
+      "# HELP apuracao_poller_rodadas Rodadas do poller",
+      "# TYPE apuracao_poller_rodadas counter",
+      `apuracao_poller_rodadas ${s.runs}`,
+      "# HELP apuracao_atualizacoes Total de atualizações detectadas",
+      "# TYPE apuracao_atualizacoes counter",
+      `apuracao_atualizacoes ${s.totalUpdates}`,
+      "# HELP apuracao_falhas Falhas de coleta",
+      "# TYPE apuracao_falhas counter",
+      `apuracao_falhas ${s.failures}`,
+      "# HELP apuracao_jws_falhas Assinaturas JWS inválidas",
+      "# TYPE apuracao_jws_falhas counter",
+      `apuracao_jws_falhas ${s.jwsFailures}`,
+      "# HELP apuracao_nao_encontrados Arquivos 404",
+      "# TYPE apuracao_nao_encontrados counter",
+      `apuracao_nao_encontrados ${s.notFound}`,
+      "# HELP apuracao_uptime_segundos Uptime do processo",
+      "# TYPE apuracao_uptime_segundos gauge",
+      `apuracao_uptime_segundos ${Math.floor(process.uptime())}`,
+    ];
+    return linhas.join("\n") + "\n";
+  });
+
   app.get("/api/resumo", async () => {
     const corridas = deps.store.summaries();
     corridas.sort((a, b) => a.cargo - b.cargo || a.uf.localeCompare(b.uf));
-    return {
-      eleicao: ELEICAO_2026,
-      total: corridas.length,
-      corridas,
-    };
+    return { eleicao: deps.eleicoes, total: corridas.length, corridas };
   });
 
   // Resultado de uma corrida. Sem municipio/zona lê do store (tempo real);
-  // com municipio/zona busca sob demanda no TSE (drill-down).
+  // com municipio/zona usa cache com TTL (busca sob demanda no TSE).
   app.get("/api/resultado", async (req, reply) => {
     const q = query(req);
-    const eleicao = toInt(q.eleicao, ELEICAO_2026.eleicoes.federal);
+    const eleicao = toInt(q.eleicao, deps.eleicoes.federal.cd);
     const cargo = toInt(q.cargo, 1);
     const uf = (q.uf ?? "br").toLowerCase();
 
     if (q.municipio || q.zona) {
-      const raw = await deps.client.getResultado({
-        ciclo: ELEICAO_2026.ciclo,
-        cdEleicao: eleicao,
+      const race = await deps.localidades.get({
+        ciclo: deps.eleicoes.ciclo,
+        eleicao,
         cargo,
         uf,
         municipio: q.municipio,
         zona: q.zona,
       });
-      if (!raw) return reply.code(404).send({ error: "sem dados para a localidade" });
-      return normalizeResultado(raw);
+      if (!race) return reply.code(404).send({ error: "sem dados para a localidade" });
+      return race;
     }
 
     const race = deps.store.getRace(eleicao, cargo, uf);
@@ -95,7 +138,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   app.get("/api/historico", async (req, reply) => {
     const q = query(req);
-    const eleicao = toInt(q.eleicao, ELEICAO_2026.eleicoes.federal);
+    const eleicao = toInt(q.eleicao, deps.eleicoes.federal.cd);
     const cargo = toInt(q.cargo, 1);
     const uf = (q.uf ?? "br").toLowerCase();
     const snapshots = deps.store.historico(eleicao, cargo, uf);
@@ -107,39 +150,55 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   app.get("/api/municipios", async (req) => {
     const q = query(req);
-    const eleicao = toInt(q.eleicao, ELEICAO_2026.eleicoes.estadual);
+    const eleicao = toInt(q.eleicao, deps.eleicoes.estadual.cd);
     const uf = (q.uf ?? "sp").toLowerCase();
     const municipios = await deps.municipios.municipiosOf(eleicao, uf);
     return { eleicao, uf, total: municipios.length, municipios };
   });
 
   // SSE: empurra atualizações conforme novas gerações chegam.
-  app.get("/api/live", (req, reply) => {
-    reply.hijack();
-    const raw = reply.raw;
-    raw.writeHead(200, {
-      "Content-Type": "text/event-stream; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
-      "Access-Control-Allow-Origin": deps.config.corsOrigin,
-    });
-    raw.write(`retry: 5000\n`);
-    raw.write(`event: hello\ndata: ${JSON.stringify({ corridas: deps.store.size, at: new Date().toISOString() })}\n\n`);
+  // Fora do rate limit global; aplica limite próprio de conexões por IP.
+  app.get(
+    "/api/live",
+    { config: { rateLimit: false } },
+    (req, reply) => {
+      const ip = req.ip;
+      const atual = ssePorIp.get(ip) ?? 0;
+      if (atual >= deps.config.maxSsePerIp) {
+        return reply.code(429).send({ error: "muitas conexões ao vivo para este IP" });
+      }
+      ssePorIp.set(ip, atual + 1);
 
-    const onUpdate = (update: { key: string; at: string; race: unknown }) => {
+      reply.hijack();
+      const raw = reply.raw;
+      raw.writeHead(200, {
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      raw.write(`retry: 5000\n`);
       raw.write(
-        `event: update\ndata: ${JSON.stringify({ key: update.key, at: update.at, race: update.race })}\n\n`,
+        `event: hello\ndata: ${JSON.stringify({ corridas: deps.store.size, at: new Date().toISOString() })}\n\n`,
       );
-    };
-    deps.store.on("update", onUpdate);
 
-    const heartbeat = setInterval(() => raw.write(`: ping\n\n`), 15_000);
-    req.raw.on("close", () => {
-      clearInterval(heartbeat);
-      deps.store.off("update", onUpdate);
-    });
-  });
+      const onUpdate = (update: { key: string; at: string; race: unknown }) => {
+        raw.write(
+          `event: update\ndata: ${JSON.stringify({ key: update.key, at: update.at, race: update.race })}\n\n`,
+        );
+      };
+      deps.store.on("update", onUpdate);
+
+      const heartbeat = setInterval(() => raw.write(`: ping\n\n`), 15_000);
+      req.raw.on("close", () => {
+        clearInterval(heartbeat);
+        deps.store.off("update", onUpdate);
+        const n = (ssePorIp.get(ip) ?? 1) - 1;
+        if (n <= 0) ssePorIp.delete(ip);
+        else ssePorIp.set(ip, n);
+      });
+    },
+  );
 
   return app;
 }

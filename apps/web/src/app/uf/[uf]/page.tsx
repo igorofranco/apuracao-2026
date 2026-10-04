@@ -117,7 +117,14 @@ function UfContent() {
         <Progress value={race.data?.secoes.percentualTotalizadas ?? 0} />
       </Card>
 
-      {race.isLoading || !race.data || !cargoAtivo ? (
+      {race.isError ? (
+        <Card className="p-6">
+          <p className="text-sm text-muted-foreground">
+            Não foi possível carregar os dados de {ufInfo.nome} agora. Pode ser uma
+            instabilidade momentânea — tente novamente em instantes.
+          </p>
+        </Card>
+      ) : race.isLoading || !race.data || !cargoAtivo ? (
         <Skeleton className="h-80 w-full" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">

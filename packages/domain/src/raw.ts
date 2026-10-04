@@ -197,6 +197,9 @@ export const configEleicaoSchema = z.looseObject({
   cdt2: z.string().optional(),
   sqele: z.string().optional(),
   nm: z.string().optional(),
+  /** Data do pleito (DD/MM/AAAA). */
+  dt: z.string().optional(),
+  dtlim: z.string().optional(),
   t: z.string().optional(),
   tp: z.string().optional(),
   abr: z.array(configAbrangenciaSchema).default([]),

@@ -6,8 +6,9 @@ import type {
 } from "@apuracao/domain";
 import type { Cargo, Uf } from "@apuracao/shared";
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8787";
+// Mesma origem por padrão (nginx proxya /api para o collector em produção).
+// Em dev, defina NEXT_PUBLIC_API_URL=http://localhost:8787 (veja .env.example).
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export class ApiError extends Error {
   readonly status: number;

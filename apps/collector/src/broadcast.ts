@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { Logger } from "./logger.ts";
 import type { RaceStore, RaceUpdate } from "./store.ts";
 
 const CHANNEL = "apuracao:updates";
@@ -12,22 +13,25 @@ export class RedisBridge {
   private readonly pub: import("ioredis").default;
   private readonly sub: import("ioredis").default;
   private readonly store: RaceStore;
+  private readonly log?: Logger;
 
   private constructor(
     pub: import("ioredis").default,
     sub: import("ioredis").default,
     store: RaceStore,
+    log?: Logger,
   ) {
     this.pub = pub;
     this.sub = sub;
     this.store = store;
+    this.log = log;
   }
 
-  static async create(url: string, store: RaceStore): Promise<RedisBridge> {
+  static async create(url: string, store: RaceStore, log?: Logger): Promise<RedisBridge> {
     const { default: Redis } = await import("ioredis");
     const pub = new Redis(url, { lazyConnect: false, maxRetriesPerRequest: 2 });
     const sub = pub.duplicate();
-    const bridge = new RedisBridge(pub, sub, store);
+    const bridge = new RedisBridge(pub, sub, store, log);
     await bridge.init();
     return bridge;
   }
@@ -54,6 +58,7 @@ export class RedisBridge {
       }
     });
     console.log("[collector] Redis pub/sub ativo para fan-out de SSE");
+    this.log?.info("Redis pub/sub ativo para fan-out de SSE");
   }
 
   async close(): Promise<void> {

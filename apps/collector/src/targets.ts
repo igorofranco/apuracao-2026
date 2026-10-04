@@ -1,4 +1,5 @@
-import { UF_SIGLAS, cargosDaUf, ELEICAO_2026 } from "@apuracao/shared";
+import { UF_SIGLAS, cargosDaUf } from "@apuracao/shared";
+import type { EleicoesResolvidas } from "./eleicoes.ts";
 
 export interface Target {
   eleicao: number;
@@ -10,24 +11,23 @@ export interface Target {
 
 /**
  * Recursos que o coletor acompanha: Presidente (nacional) + cargos estaduais por
- * UF (Governador, Senador, Dep. Federal, Dep. Estadual/Distrital).
+ * UF (Governador, Senador, Dep. Federal, Dep. Estadual/Distrital). Os códigos de
+ * eleição vêm das eleições resolvidas (cobre 2º turno automaticamente).
  */
-export function buildTargets(): Target[] {
+export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
   const targets: Target[] = [];
 
-  // Presidente (agregado Brasil).
   targets.push({
-    eleicao: ELEICAO_2026.eleicoes.federal,
+    eleicao: eleicoes.federal.cd,
     cargo: 1,
     uf: "br",
     label: "Presidente (BR)",
   });
 
-  // Cargos estaduais/distritais por UF.
   for (const uf of UF_SIGLAS) {
     for (const cargo of cargosDaUf(uf)) {
       targets.push({
-        eleicao: ELEICAO_2026.eleicoes.estadual,
+        eleicao: eleicoes.estadual.cd,
         cargo: cargo.codigo,
         uf,
         label: `${cargo.curto} (${uf.toUpperCase()})`,
