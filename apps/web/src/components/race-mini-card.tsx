@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { RaceSummary } from "@apuracao/domain";
 import { useResultado } from "@/lib/queries";
-import { CandidateBar } from "@/components/candidate-bar";
+import { CandidateRow } from "@/components/candidate-row";
 import { Card, Progress, Skeleton } from "@/components/ui";
 import { formatPercent } from "@/lib/format";
 import {
@@ -75,7 +75,7 @@ export function RaceMiniCard({
         barClassName={finalizado ? "bg-success" : undefined}
       />
 
-      <div className="mt-4 flex-1 space-y-3">
+      <div className="mt-4 flex-1 space-y-2">
         {resultado.isLoading && !race ? (
           Array.from({ length: topN }).map((_, i) => (
             <Skeleton key={i} className="h-9 w-full" />
@@ -85,14 +85,16 @@ export function RaceMiniCard({
             Aguardando a coleta desta corrida.
           </p>
         ) : candidatos.length > 0 ? (
-          candidatos.map((c, i) => (
-            <CandidateBar
-              key={c.numero + c.nome}
-              candidato={c}
-              maxVotos={maxVotos}
-              destaque={i === 0 && maxVotos > 0}
-            />
-          ))
+          <ul className="divide-y divide-border">
+            {candidatos.map((c, i) => (
+              <CandidateRow
+                key={c.numero + c.nome}
+                candidato={c}
+                destaque={i === 0 && maxVotos > 0}
+                className="py-2 first:pt-0 last:pb-0"
+              />
+            ))}
+          </ul>
         ) : (
           <p className="text-sm text-muted-foreground">Apuração ainda não iniciada.</p>
         )}

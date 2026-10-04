@@ -316,7 +316,7 @@ test.describe("painel personalizado", () => {
       await expect(page.locator(`[data-corrida="${chave}"]`)).toBeVisible();
     }
     // Cada card carregou seu resultado e mostra exatamente top 3 candidatos.
-    await expect(page.getByTestId("race-mini-card").getByTestId("candidate-bar")).toHaveCount(15, {
+    await expect(page.getByTestId("race-mini-card").getByTestId("candidate-row")).toHaveCount(15, {
       timeout: 20_000,
     });
     // A seleção sobrevive ao reload (mas o painel volta recolhido).
@@ -338,7 +338,7 @@ test.describe("painel personalizado", () => {
     // Atalho adiciona as três corridas de MG de uma vez.
     await page.getByRole("button", { name: /MG \(majoritários\)/ }).click();
     await expect(page.getByTestId("race-mini-card")).toHaveCount(3);
-    const barras = page.getByTestId("race-mini-card").getByTestId("candidate-bar");
+    const barras = page.getByTestId("race-mini-card").getByTestId("candidate-row");
     await expect(barras).toHaveCount(9, { timeout: 20_000 });
 
     // Edita: muda para top 5.
