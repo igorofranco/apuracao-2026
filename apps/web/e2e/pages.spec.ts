@@ -20,6 +20,8 @@ interface Pagina {
   progresso?: boolean;
   aoVivo?: boolean;
   permitir404?: boolean;
+  /** Página com tabela de candidatos (cargo proporcional). */
+  tabela?: boolean;
 }
 
 const PAGINAS: Pagina[] = [
@@ -69,6 +71,24 @@ const PAGINAS: Pagina[] = [
     texto: /Dep\. Distrital/,
     progresso: true,
     aoVivo: true,
+  },
+  {
+    name: "uf-sp-dep-federal",
+    path: "/uf/sp?cargo=6",
+    heading: /São Paulo/,
+    texto: /Deputado Federal/,
+    progresso: true,
+    aoVivo: true,
+    tabela: true,
+  },
+  {
+    name: "uf-df-dep-distrital",
+    path: "/uf/df?cargo=8",
+    heading: /Distrito Federal/,
+    texto: /Deputado Distrital/,
+    progresso: true,
+    aoVivo: true,
+    tabela: true,
   },
   {
     name: "nao-encontrado",
@@ -177,6 +197,18 @@ test.describe("páginas", () => {
         await expect(page.getByText("Ao vivo").first()).toBeVisible({
           timeout: 20_000,
         });
+      }
+      if (p.tabela) {
+        // Em telas pequenas a tabela dá lugar a uma lista, sem colunas cortadas.
+        const tabela = page.getByTestId("candidatos-tabela");
+        const lista = page.getByTestId("candidatos-lista");
+        if (testInfo.project.name === "desktop") {
+          await expect(tabela).toBeVisible();
+          await expect(lista).toBeHidden();
+        } else {
+          await expect(lista).toBeVisible();
+          await expect(tabela).toBeHidden();
+        }
       }
 
       // Deixa gráficos (Recharts) e transições assentarem antes da captura.

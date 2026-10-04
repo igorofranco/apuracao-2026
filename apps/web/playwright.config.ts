@@ -33,6 +33,16 @@ export default defineConfig({
       name: "mobile",
       use: { ...devices["Pixel 7"] },
     },
+    {
+      // Telas estreitas reais (ex.: Galaxy S20 FE, ~360px lógicos).
+      name: "mobile-sm",
+      use: { ...devices["Pixel 7"], viewport: { width: 360, height: 800 } },
+    },
+    {
+      // Menor largura comum (ex.: iPhone SE 1ª ger., ~320px lógicos).
+      name: "mobile-xs",
+      use: { ...devices["Pixel 7"], viewport: { width: 320, height: 720 } },
+    },
   ],
   webServer: [
     {
