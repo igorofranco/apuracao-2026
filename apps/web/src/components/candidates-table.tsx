@@ -21,7 +21,8 @@ export function CandidatesTable({
 
   return (
     <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
+      {/* Tabela: telas >= md */}
+      <div data-testid="candidatos-tabela" className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -69,6 +70,36 @@ export function CandidatesTable({
           </tbody>
         </table>
       </div>
+
+      {/* Lista: telas pequenas (< md) — evita espremer/cortar as colunas */}
+      <ul data-testid="candidatos-lista" className="divide-y divide-border md:hidden">
+        {visiveis.map((c) => (
+          <li
+            key={`${c.numero}-${c.sqcand ?? c.nome}`}
+            className="flex items-center gap-3 px-3 py-2.5"
+          >
+            <span className="tabular inline-flex h-7 min-w-7 shrink-0 items-center justify-center rounded-md bg-muted px-1.5 text-xs font-semibold text-muted-foreground">
+              {c.numero}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="truncate text-sm font-medium">{c.nomeUrna}</span>
+                {c.eleito ? <Badge variant="success">Eleito</Badge> : null}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {c.siglaPartido}
+                {c.situacao ? ` · ${c.situacao}` : ""}
+              </div>
+            </div>
+            <div className="shrink-0 text-right">
+              <div className="tabular text-sm font-semibold">{formatInt(c.votos)}</div>
+              <div className="tabular text-xs text-muted-foreground">
+                {formatPercent(c.percentual)}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
 
       {candidatos.length > limiteInicial ? (
         <div className="flex justify-center border-t border-border p-3">
