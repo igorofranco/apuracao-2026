@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Pencil, Settings2, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Settings2, Sparkles } from "lucide-react";
 import type { RaceSummary } from "@apuracao/domain";
 import { useResumo } from "@/lib/queries";
-import { Skeleton, buttonClass } from "@/components/ui";
+import { buttonClass } from "@/components/ui";
 import { PainelEditor } from "@/components/painel-editor";
 import { RaceMiniCard } from "@/components/race-mini-card";
 import { chaveCorrida, usePainel, type CorridaFixada } from "@/lib/painel";
@@ -38,12 +38,15 @@ const PRESETS: { label: string; descricao: string; itens: CorridaFixada[] }[] = 
 
 /**
  * Seção personalizável do painel inicial: o usuário escolhe quais corridas
- * acompanhar de perto. A preferência fica no `localStorage` (sem backend).
+ * acompanhar de perto. Fica **recolhida** por padrão — o botão "Painel
+ * personalizado" revela o conteúdo. A preferência fica no `localStorage`
+ * (sem backend); o recolhimento é volátil (não persiste).
  */
 export function MeuPainel() {
   const { pronto, config, adicionar, adicionarVarias, remover, mover, setTopN, limpar } =
     usePainel();
   const resumo = useResumo();
+  const [aberto, setAberto] = useState(false);
   const [editando, setEditando] = useState(false);
 
   const resumoPorChave = useMemo(() => {
@@ -55,20 +58,36 @@ export function MeuPainel() {
   }, [resumo.data]);
 
   if (!pronto) {
-    return (
-      <section aria-label="Meu painel">
-        <Skeleton className="h-8 w-40" />
-        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-64 w-full" />
-          ))}
-        </div>
-      </section>
-    );
+    return <div className="h-9 w-52 animate-pulse rounded-lg bg-muted" aria-hidden />;
   }
 
   const vazio = config.itens.length === 0;
-  const mostrarEditor = editando || vazio;
+  const mostrarEditor = aberto && (editando || vazio);
+
+  // Recolhido: apenas o botão que revela o painel.
+  if (!aberto) {
+    return (
+      <section aria-label="Meu painel">
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setAberto(true)}
+          className="flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left transition hover:border-primary/50"
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-sm font-semibold">Painel personalizado</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {vazio
+                ? "acompanhe as corridas que você escolher"
+                : `${config.itens.length} corrida${config.itens.length > 1 ? "s" : ""} · top ${config.topN} de cada`}
+            </span>
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </button>
+      </section>
+    );
+  }
 
   return (
     <section aria-labelledby="meu-painel-titulo">
@@ -84,25 +103,39 @@ export function MeuPainel() {
               : `${config.itens.length} corrida${config.itens.length > 1 ? "s" : ""} · top ${config.topN} de cada`}
           </p>
         </div>
-        {!vazio ? (
+        <div className="flex items-center gap-2">
+          {!vazio ? (
+            <button
+              type="button"
+              onClick={() => setEditando((v) => !v)}
+              className={buttonClass("outline", "gap-1.5 whitespace-nowrap")}
+            >
+              {editando ? (
+                <>
+                  <Settings2 className="h-4 w-4" />
+                  Concluir
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4" />
+                  Editar painel
+                </>
+              )}
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => setEditando((v) => !v)}
-            className={buttonClass("outline", "gap-1.5 whitespace-nowrap")}
+            aria-expanded={true}
+            onClick={() => {
+              setAberto(false);
+              setEditando(false);
+            }}
+            className={buttonClass("ghost", "gap-1.5 whitespace-nowrap")}
           >
-            {editando ? (
-              <>
-                <Settings2 className="h-4 w-4" />
-                Concluir
-              </>
-            ) : (
-              <>
-                <Pencil className="h-4 w-4" />
-                Editar painel
-              </>
-            )}
+            <ChevronUp className="h-4 w-4" />
+            Ocultar
           </button>
-        ) : null}
+        </div>
       </div>
 
       {mostrarEditor ? (

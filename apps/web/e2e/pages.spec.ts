@@ -266,10 +266,22 @@ test.describe("painel personalizado", () => {
     await page.screenshot({ path: `${dir}/${nome}.png`, fullPage: true });
   }
 
-  test("estado vazio mostra atalhos e configuração", async ({ page }, testInfo) => {
+  test("recolhido por padrão; botão revela a configuração", async ({ page }, testInfo) => {
     const erros = monitorar(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
+    // Nada de painel é mostrado até o usuário clicar.
+    await expect(page.getByTestId("race-mini-card")).toHaveCount(0);
+    await expect(page.getByText("Começar com um atalho")).toBeHidden();
+
+    await capturar(page, testInfo, "painel-recolhido");
+
+    const botao = page.getByRole("button", { name: /Painel personalizado/ });
+    await expect(botao).toBeVisible();
+    await expect(botao).toHaveAttribute("aria-expanded", "false");
+    await botao.click();
+
+    // Expande para o editor + atalhos.
     await expect(page.getByRole("heading", { name: "Meu painel" })).toBeVisible();
     await expect(page.getByText("Começar com um atalho")).toBeVisible();
     await expect(
@@ -277,6 +289,11 @@ test.describe("painel personalizado", () => {
     ).toBeVisible();
 
     await capturar(page, testInfo, "painel-vazio");
+
+    // "Ocultar" recolhe de novo.
+    await page.getByRole("button", { name: "Ocultar" }).click();
+    await expect(page.getByText("Começar com um atalho")).toBeHidden();
+
     expect(erros, erros.join("\n")).toEqual([]);
   });
 
@@ -288,6 +305,11 @@ test.describe("painel personalizado", () => {
 
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
+    // Recolhido mostra o resumo da seleção salva.
+    const botao = page.getByRole("button", { name: /Painel personalizado/ });
+    await expect(botao).toContainText("5 corridas · top 3 de cada");
+    await botao.click();
+
     const cards = page.getByTestId("race-mini-card");
     await expect(cards).toHaveCount(5);
     for (const chave of ["1:br", "3:mg", "5:mg", "3:sp", "5:sp"]) {
@@ -297,8 +319,10 @@ test.describe("painel personalizado", () => {
     await expect(page.getByTestId("race-mini-card").getByTestId("candidate-bar")).toHaveCount(15, {
       timeout: 20_000,
     });
-    // A seleção sobrevive ao reload.
+    // A seleção sobrevive ao reload (mas o painel volta recolhido).
     await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("race-mini-card")).toHaveCount(0);
+    await page.getByRole("button", { name: /Painel personalizado/ }).click();
     await expect(page.getByTestId("race-mini-card")).toHaveCount(5);
 
     await capturar(page, testInfo, "painel-personalizado");
@@ -308,6 +332,8 @@ test.describe("painel personalizado", () => {
   test("atalho, reordenação, top 5 e remoção", async ({ page }, testInfo) => {
     const erros = monitorar(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await page.getByRole("button", { name: /Painel personalizado/ }).click();
 
     // Atalho adiciona as três corridas de MG de uma vez.
     await page.getByRole("button", { name: /MG \(majoritários\)/ }).click();
