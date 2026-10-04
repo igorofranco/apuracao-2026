@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { RaceResult, RaceSummary, Snapshot } from "@apuracao/domain";
-import { summarizeRace, snapshotFrom } from "@apuracao/domain";
+import { raceKey, summarizeRace, snapshotFrom } from "@apuracao/domain";
 
 export interface RaceUpdate {
   key: string;
@@ -61,7 +61,7 @@ export class RaceStore extends EventEmitter {
     if (!this.options.repo) return;
     const recent = await this.options.repo.loadRecent(this.options.snapshotLimit);
     for (const snap of recent) {
-      const key = `${snap.eleicao}:${snap.cargo}:${snap.uf}`;
+      const key = raceKey(snap);
       const list = this.snapshots.get(key) ?? [];
       list.push(snap);
       this.snapshots.set(key, list);
@@ -69,7 +69,7 @@ export class RaceStore extends EventEmitter {
   }
 
   setRace(race: RaceResult, at = new Date().toISOString()): RaceUpdate {
-    const key = `${race.eleicao}:${race.cargo}:${race.uf}`;
+    const key = raceKey(race);
     const sig = signature(race);
     const changed = this.signatures.get(key) !== sig;
     this.races.set(key, race);
@@ -93,7 +93,7 @@ export class RaceStore extends EventEmitter {
   }
 
   getRace(eleicao: number, cargo: number, uf: string): RaceResult | undefined {
-    return this.races.get(`${eleicao}:${cargo}:${uf}`);
+    return this.races.get(raceKey({ eleicao, cargo, uf }));
   }
 
   listRaces(): RaceResult[] {
@@ -105,7 +105,7 @@ export class RaceStore extends EventEmitter {
   }
 
   historico(eleicao: number, cargo: number, uf: string): Snapshot[] {
-    return this.snapshots.get(`${eleicao}:${cargo}:${uf}`) ?? [];
+    return this.snapshots.get(raceKey({ eleicao, cargo, uf })) ?? [];
   }
 
   /**
@@ -142,10 +142,6 @@ export class RaceStore extends EventEmitter {
   async prune(retentionDays: number): Promise<number> {
     if (!this.options.repo?.prune) return 0;
     return this.options.repo.prune(retentionDays);
-  }
-
-  lastUpdateAt(eleicao: number, cargo: number, uf: string): string | undefined {
-    return this.updatedAt.get(`${eleicao}:${cargo}:${uf}`);
   }
 
   /** Maior timestamp de atualização conhecido (para /status). */

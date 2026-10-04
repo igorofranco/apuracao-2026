@@ -1,9 +1,9 @@
-import { normalizeResultado } from "@apuracao/domain";
+import { normalizeResultado, raceKey } from "@apuracao/domain";
 import { JwsError, TseClient } from "@apuracao/tse-client";
 import type { CollectorConfig } from "./config.ts";
 import { estaEmApuracao, type EleicoesResolvidas } from "./eleicoes.ts";
 import type { Logger } from "./logger.ts";
-import { raceKey, type Target } from "./targets.ts";
+import type { Target } from "./targets.ts";
 import type { RaceStore } from "./store.ts";
 
 export interface PollerStats {

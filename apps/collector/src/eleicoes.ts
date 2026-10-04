@@ -1,5 +1,5 @@
 import { ELEICAO_2026 } from "@apuracao/shared";
-import type { RawConfig, RawConfigEleicao } from "@apuracao/domain";
+import { parseDataHora, type RawConfig, type RawConfigEleicao } from "@apuracao/domain";
 import { findPleito, listEleicoes, type TseClient } from "@apuracao/tse-client";
 import type { CollectorConfig } from "./config.ts";
 import type { Logger } from "./logger.ts";
@@ -21,11 +21,6 @@ export interface EleicoesResolvidas {
 }
 
 const turno = (e: RawConfigEleicao): number => Number(e.t ?? "1") || 1;
-const dataIso = (ddmmaaaa: string | undefined): string | null => {
-  if (!ddmmaaaa || !/^\d{2}\/\d{2}\/\d{4}$/.test(ddmmaaaa)) return null;
-  const [d, m, y] = ddmmaaaa.split("/");
-  return `${y}-${m}-${d}T17:00:00-03:00`;
-};
 
 /** Escolhe, por tipo de pleito (tp), a eleição de maior turno (cobre 2º turno). */
 function escolherPorTipo(lista: RawConfigEleicao[], tp: string): RawConfigEleicao | undefined {
@@ -39,7 +34,7 @@ function acharPorCd(lista: RawConfigEleicao[], cd: number): RawConfigEleicao | u
 }
 
 function paraResolvida(e: RawConfigEleicao): EleicaoResolvida {
-  return { cd: Number(e.cd), turno: turno(e), data: dataIso(e.dt), nome: e.nm ?? null };
+  return { cd: Number(e.cd), turno: turno(e), data: parseDataHora(e.dt, "17:00:00"), nome: e.nm ?? null };
 }
 
 /**

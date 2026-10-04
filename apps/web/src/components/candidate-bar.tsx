@@ -1,4 +1,5 @@
 import type { CandidateResult } from "@apuracao/domain";
+import { NumeroBadge } from "@/components/numero-badge";
 import { cn } from "@/lib/utils";
 import { formatInt, formatPercent } from "@/lib/format";
 
@@ -16,14 +17,7 @@ export function CandidateBar({
     <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span
-            className={cn(
-              "tabular inline-flex h-6 min-w-6 items-center justify-center rounded-md px-1.5 text-xs font-semibold",
-              destaque ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}
-          >
-            {candidato.numero}
-          </span>
+          <NumeroBadge numero={candidato.numero} destaque={destaque} />
           <span className="min-w-0 truncate text-sm font-medium">
             {candidato.nomeUrna}
           </span>

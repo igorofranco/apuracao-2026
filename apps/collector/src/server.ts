@@ -32,6 +32,16 @@ function toInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) && value !== undefined ? n : fallback;
 }
 
+/** Bloco de exposição de uma métrica no formato do Prometheus. */
+function metric(
+  nome: string,
+  tipo: "gauge" | "counter",
+  help: string,
+  valor: number,
+): string[] {
+  return [`# HELP ${nome} ${help}`, `# TYPE ${nome} ${tipo}`, `${nome} ${valor}`];
+}
+
 export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false, trustProxy: true });
 
@@ -44,6 +54,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
   });
 
   const ssePorIp = new Map<string, number>();
+  const totalSse = () => [...ssePorIp.values()].reduce((a, b) => a + b, 0);
 
   app.get("/health", async () => ({ ok: true }));
 
@@ -64,7 +75,7 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     postgres: deps.flags.postgres,
     historyRetentionDays: deps.config.history.retentionDays,
     localidadesEmCache: deps.localidades.tamanho,
-    sseClientes: [...ssePorIp.values()].reduce((a, b) => a + b, 0),
+    sseClientes: totalSse(),
     poller: deps.poller.stats,
   }));
 
@@ -73,30 +84,24 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     reply.header("content-type", "text/plain; version=0.0.4");
     const s = deps.poller.stats;
     const linhas = [
-      "# HELP apuracao_corridas Corridas na memória",
-      "# TYPE apuracao_corridas gauge",
-      `apuracao_corridas ${deps.store.size}`,
-      "# HELP apuracao_sse_clientes Conexões SSE ativas",
-      "# TYPE apuracao_sse_clientes gauge",
-      `apuracao_sse_clientes ${[...ssePorIp.values()].reduce((a, b) => a + b, 0)}`,
-      "# HELP apuracao_poller_rodadas Rodadas do poller",
-      "# TYPE apuracao_poller_rodadas counter",
-      `apuracao_poller_rodadas ${s.runs}`,
-      "# HELP apuracao_atualizacoes Total de atualizações detectadas",
-      "# TYPE apuracao_atualizacoes counter",
-      `apuracao_atualizacoes ${s.totalUpdates}`,
-      "# HELP apuracao_falhas Falhas de coleta",
-      "# TYPE apuracao_falhas counter",
-      `apuracao_falhas ${s.failures}`,
-      "# HELP apuracao_jws_falhas Assinaturas JWS inválidas",
-      "# TYPE apuracao_jws_falhas counter",
-      `apuracao_jws_falhas ${s.jwsFailures}`,
-      "# HELP apuracao_nao_encontrados Arquivos 404",
-      "# TYPE apuracao_nao_encontrados counter",
-      `apuracao_nao_encontrados ${s.notFound}`,
-      "# HELP apuracao_uptime_segundos Uptime do processo",
-      "# TYPE apuracao_uptime_segundos gauge",
-      `apuracao_uptime_segundos ${Math.floor(process.uptime())}`,
+      ...metric("apuracao_corridas", "gauge", "Corridas na memória", deps.store.size),
+      ...metric("apuracao_sse_clientes", "gauge", "Conexões SSE ativas", totalSse()),
+      ...metric("apuracao_poller_rodadas", "counter", "Rodadas do poller", s.runs),
+      ...metric(
+        "apuracao_atualizacoes",
+        "counter",
+        "Total de atualizações detectadas",
+        s.totalUpdates,
+      ),
+      ...metric("apuracao_falhas", "counter", "Falhas de coleta", s.failures),
+      ...metric("apuracao_jws_falhas", "counter", "Assinaturas JWS inválidas", s.jwsFailures),
+      ...metric("apuracao_nao_encontrados", "counter", "Arquivos 404", s.notFound),
+      ...metric(
+        "apuracao_uptime_segundos",
+        "gauge",
+        "Uptime do processo",
+        Math.floor(process.uptime()),
+      ),
     ];
     return linhas.join("\n") + "\n";
   });

@@ -1,10 +1,4 @@
-const nf = new Intl.NumberFormat("pt-BR");
 const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-
-export function formatNumber(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return "—";
-  return nf.format(value);
-}
 
 export function formatInt(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return "—";

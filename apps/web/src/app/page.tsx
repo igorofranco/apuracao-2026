@@ -6,6 +6,7 @@ import { ELEICAO_2026, UFS, getCargo } from "@apuracao/shared";
 import { useResumo, useResultado } from "@/lib/queries";
 import { LiveBadge } from "@/components/live-badge";
 import { CandidateBar } from "@/components/candidate-bar";
+import { NumeroBadge } from "@/components/numero-badge";
 import { BrazilMap, type MapaDado } from "@/components/brazil-map";
 import { Card, Progress, Skeleton } from "@/components/ui";
 import { formatDateTime, formatPercent } from "@/lib/format";
@@ -92,9 +93,7 @@ export default function HomePage() {
                 Liderança
               </div>
               <div className="mt-1 flex items-center gap-2">
-                <span className="tabular inline-flex h-7 min-w-7 items-center justify-center rounded-md bg-primary px-2 text-sm font-semibold text-primary-foreground">
-                  {lider.numero}
-                </span>
+                <NumeroBadge numero={lider.numero} destaque tamanho="md" />
                 <span className="min-w-0 truncate font-semibold">{lider.nomeUrna}</span>
                 <span className="ml-auto tabular font-semibold">
                   {formatPercent(lider.percentual)}

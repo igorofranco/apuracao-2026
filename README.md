@@ -202,8 +202,9 @@ location / {
 npm run check     # typecheck + lint + test
 ```
 
-- **19 testes**: normalização dos dados do TSE, verificação JWS (fixtures reais) e
-  integração HTTP do collector (rotas, cache de localidade, 404 e rate limit).
+- **32 testes**: normalização dos dados do TSE (inclusive conversores numéricos),
+  verificação JWS (fixtures reais), cache assíncrono com dedupe e integração HTTP
+  do collector (rotas, cache de localidade, 404 e rate limit).
 - Typecheck estrito em todos os pacotes; ESLint (flat config).
 
 ## Escopo atual

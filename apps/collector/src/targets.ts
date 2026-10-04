@@ -37,6 +37,3 @@ export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
 
   return targets;
 }
-
-export const raceKey = (t: Pick<Target, "eleicao" | "cargo" | "uf">): string =>
-  `${t.eleicao}:${t.cargo}:${t.uf}`;

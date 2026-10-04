@@ -11,19 +11,7 @@ import type {
   AbrangenciaTipo,
 } from "./types.ts";
 import type { RawResultado, RawMunicipioFile } from "./raw.ts";
-
-/** Converte "s"/"S" em true; qualquer outra coisa em false. */
-export function toBool(value: string | undefined | null): boolean {
-  return (value ?? "").trim().toLowerCase() === "s";
-}
-
-/** Converte string numérica (com vírgula decimal) em número. */
-export function toNumber(value: string | number | undefined | null): number {
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
-  if (value == null) return 0;
-  const n = Number(String(value).replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
-}
+import { toBool, toNumber } from "./numbers.ts";
 
 /** "04/10/2026" + "17:30:00" -> ISO (America/Sao_Paulo). */
 export function parseDataHora(

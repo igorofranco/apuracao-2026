@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { geoMercator, geoPath, type GeoPermissibleObjects } from "d3-geo";
 import { useRouter } from "next/navigation";
-import { getUf } from "@apuracao/shared";
+import { UFS, getUf } from "@apuracao/shared";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/format";
 
@@ -31,6 +31,9 @@ interface FeatureCollection {
 }
 
 const VIEW = 760;
+
+/** Código IBGE -> sigla da UF (para casar as features do GeoJSON). */
+const UF_POR_IBGE = new Map(UFS.map((u) => [u.codigoIbge, u.uf]));
 
 function corApuracao(pct: number): string {
   const t = Math.max(0, Math.min(1, pct / 100));
@@ -85,11 +88,10 @@ export function BrazilMap({
     const projection = geoMercator().fitSize([VIEW, VIEW], geo as unknown as GeoPermissibleObjects);
     const path = geoPath(projection);
     return geo.features.map((f) => {
-      const ibge = Number(f.properties.codarea);
-      const uf = [...porUf.keys()].find((k) => getUf(k)?.codigoIbge === ibge) ?? "";
+      const uf = UF_POR_IBGE.get(Number(f.properties.codarea)) ?? "";
       return { uf, d: path(f as unknown as GeoPermissibleObjects) ?? "" };
     });
-  }, [geo, porUf]);
+  }, [geo]);
 
   const cor = (d: MapaDado | undefined): string => {
     if (!d) return "var(--muted)";

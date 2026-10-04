@@ -26,13 +26,6 @@ export function decodeJwsPayload(token: string): string {
   return b64urlToBuffer(parts[1] as string).toString("utf8");
 }
 
-/** Lê o header (1ª parte) de um JWS compacto. */
-export function decodeJwsHeader(token: string): Record<string, unknown> {
-  const parts = token.trim().split(".");
-  if (parts.length !== 3) throw new JwsError("JWS malformado: esperado 3 partes");
-  return JSON.parse(b64urlToBuffer(parts[0] as string).toString("utf8"));
-}
-
 /**
  * Verifica a assinatura Ed25519 de um JWS compacto e devolve o payload.
  * Lança `JwsError` se a assinatura não bater.

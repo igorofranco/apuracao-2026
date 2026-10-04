@@ -4,8 +4,6 @@ import { CandidateBar } from "@/components/candidate-bar";
 import { CandidatesTable } from "@/components/candidates-table";
 import { Card } from "@/components/ui";
 
-const MAJORITARIOS = new Set([1, 3, 5]);
-
 export function RaceBoard({
   race,
   cargo,
@@ -15,7 +13,7 @@ export function RaceBoard({
   cargo: Cargo;
   maxBarras?: number;
 }) {
-  const majoritario = MAJORITARIOS.has(cargo.codigo);
+  const majoritario = cargo.majoritario;
   const maxVotos = race.candidatos[0]?.votos ?? 0;
 
   if (majoritario) {

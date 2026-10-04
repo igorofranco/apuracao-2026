@@ -1,34 +1,28 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
-import {
-  ELEICAO_2026,
-  cargosDaUf,
-  getUf,
-  isUf,
-  type Cargo,
-} from "@apuracao/shared";
+import { useParams } from "next/navigation";
+import { ELEICAO_2026, getUf } from "@apuracao/shared";
 import { useMunicipios, useResultado } from "@/lib/queries";
-import { LiveBadge } from "@/components/live-badge";
-import { RaceBoard } from "@/components/race-board";
+import { CargoTabs, useCargoAtivo } from "@/components/cargo-tabs";
+import { ErrorCard } from "@/components/error-card";
+import { RaceDetail } from "@/components/race-detail";
+import { RaceHeader } from "@/components/race-header";
+import { TotalizadasCard } from "@/components/totalizadas-card";
 import { TurnoutPanel } from "@/components/turnout-panel";
-import { Card, Progress, Skeleton, buttonClass } from "@/components/ui";
-import { cn } from "@/lib/utils";
-import { formatDateTime, formatPercent } from "@/lib/format";
+import { Card, Skeleton, buttonClass } from "@/components/ui";
+import { formatDateTime } from "@/lib/format";
 
 function MunicipioContent() {
   const params = useParams<{ uf: string; municipio: string }>();
-  const search = useSearchParams();
-  const router = useRouter();
   const uf = (params.uf ?? "").toLowerCase();
   const municipio = params.municipio ?? "";
   const ufInfo = getUf(uf);
-  const cargos = useMemo(() => (isUf(uf) ? cargosDaUf(uf) : []), [uf]);
-  const cargoParam = Number(search.get("cargo"));
-  const cargoAtivo: Cargo | undefined =
-    cargos.find((c) => c.codigo === cargoParam) ?? cargos[0];
+  const { cargos, cargoAtivo, selecionar } = useCargoAtivo(
+    uf,
+    `/uf/${uf}/${municipio}`,
+  );
 
   const municipios = useMunicipios({
     eleicao: ELEICAO_2026.eleicoes.estadual,
@@ -44,63 +38,37 @@ function MunicipioContent() {
   });
 
   if (!ufInfo) {
-    return (
-      <Card className="p-6">
-        <p className="text-sm text-muted-foreground">UF inválida.</p>
-      </Card>
-    );
+    return <ErrorCard>UF inválida.</ErrorCard>;
   }
 
   const nomeMunicipio = municipioInfo?.nome ?? `Município ${municipio}`;
+  const zonas = municipioInfo?.zonas ?? [];
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link href="/" className="hover:underline">
-              Painel
-            </Link>
-            <span>/</span>
-            <Link href={`/uf/${uf}`} className="hover:underline">
-              {ufInfo.nome}
-            </Link>
-          </div>
-          <h1 className="text-2xl font-bold">{nomeMunicipio}</h1>
-          <p className="text-sm text-muted-foreground">
+      <RaceHeader
+        crumbs={[
+          { label: "Painel", href: "/" },
+          { label: ufInfo.nome, href: `/uf/${uf}` },
+        ]}
+        title={nomeMunicipio}
+        subtitle={
+          <>
             {cargoAtivo?.nome} · atualizado {formatDateTime(race.data?.atualizadoEm)}
-          </p>
-        </div>
-        <LiveBadge />
-      </section>
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap gap-1">
-        {cargos.map((c) => (
-          <button
-            key={c.codigo}
-            type="button"
-            onClick={() => router.replace(`/uf/${uf}/${municipio}?cargo=${c.codigo}`)}
-            className={cn(
-              buttonClass("ghost", "px-3 py-1.5"),
-              cargoAtivo?.codigo === c.codigo &&
-                "bg-primary text-primary-foreground hover:bg-primary",
-            )}
-          >
-            {c.curto}
-          </button>
-        ))}
-      </div>
+      <CargoTabs cargos={cargos} ativo={cargoAtivo} onSelecionar={selecionar} />
 
       {race.isError ? (
-        <Card className="p-6">
-          <p className="text-sm text-muted-foreground">
-            Sem dados para este município/cargo (ou apuração ainda não iniciada).
-          </p>
-          {municipioInfo?.zonas?.length ? (
+        <ErrorCard>
+          Sem dados para este município/cargo (ou apuração ainda não iniciada).
+          {zonas.length ? (
             <div className="mt-4">
               <p className="mb-2 text-sm font-medium">Zonas eleitorais</p>
               <div className="flex flex-wrap gap-2">
-                {municipioInfo.zonas.map((z) => (
+                {zonas.map((z) => (
                   <Link
                     key={z}
                     href={`/uf/${uf}/${municipio}/zona/${z}?cargo=${cargoAtivo?.codigo ?? 3}`}
@@ -112,47 +80,40 @@ function MunicipioContent() {
               </div>
             </div>
           ) : null}
-        </Card>
+        </ErrorCard>
       ) : race.isLoading || !race.data || !cargoAtivo ? (
         <Skeleton className="h-80 w-full" />
       ) : (
         <>
-          <Card className="p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium">Seções totalizadas</span>
-              <span className="tabular text-lg font-semibold">
-                {formatPercent(race.data.secoes.percentualTotalizadas)}
-              </span>
-            </div>
-            <Progress value={race.data.secoes.percentualTotalizadas} />
-          </Card>
+          <TotalizadasCard value={race.data.secoes.percentualTotalizadas} />
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="min-w-0 lg:col-span-2">
-              <RaceBoard race={race.data} cargo={cargoAtivo} />
-            </div>
-            <div className="min-w-0 space-y-4">
-              <TurnoutPanel race={race.data} />
-              {municipioInfo?.zonas?.length ? (
-                <Card className="p-4">
-                  <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Zonas eleitorais
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {municipioInfo.zonas.map((z) => (
-                      <Link
-                        key={z}
-                        href={`/uf/${uf}/${municipio}/zona/${z}?cargo=${cargoAtivo.codigo}`}
-                        className={buttonClass("outline", "px-2.5 py-1 text-xs")}
-                      >
-                        {z}
-                      </Link>
-                    ))}
-                  </div>
-                </Card>
-              ) : null}
-            </div>
-          </div>
+          <RaceDetail
+            race={race.data}
+            cargo={cargoAtivo}
+            side={
+              <>
+                <TurnoutPanel race={race.data} />
+                {zonas.length ? (
+                  <Card className="p-4">
+                    <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                      Zonas eleitorais
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {zonas.map((z) => (
+                        <Link
+                          key={z}
+                          href={`/uf/${uf}/${municipio}/zona/${z}?cargo=${cargoAtivo.codigo}`}
+                          className={buttonClass("outline", "px-2.5 py-1 text-xs")}
+                        >
+                          {z}
+                        </Link>
+                      ))}
+                    </div>
+                  </Card>
+                ) : null}
+              </>
+            }
+          />
         </>
       )}
     </div>

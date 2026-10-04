@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toNumber, toPercent } from "./numbers.ts";
 
 /**
  * Schemas tolerantes para os arquivos de resultado do TSE
@@ -9,21 +10,10 @@ import { z } from "zod";
  */
 
 /** Aceita número ou string e converte para número (vírgula decimal vira ponto). */
-const numFromString = z
-  .union([z.number(), z.string()])
-  .transform((v) => {
-    if (typeof v === "number") return v;
-    const n = Number(v.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  });
+const numFromString = z.union([z.number(), z.string()]).transform(toNumber);
 
-const pctFromString = z
-  .union([z.number(), z.string()])
-  .transform((v) => {
-    if (typeof v === "number") return v;
-    const n = Number(v.replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
-  });
+/** Percentual: ponto ou vírgula como decimal (ex.: "50,00" -> 50). */
+const pctFromString = z.union([z.number(), z.string()]).transform(toPercent);
 
 export const viceSchema = z.looseObject({
   sqcand: z.string().optional(),
