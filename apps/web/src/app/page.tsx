@@ -8,6 +8,7 @@ import { LiveBadge } from "@/components/live-badge";
 import { CandidateBar } from "@/components/candidate-bar";
 import { NumeroBadge } from "@/components/numero-badge";
 import { BrazilMap, type MapaDado } from "@/components/brazil-map";
+import { MeuPainel } from "@/components/meu-painel";
 import { Card, Progress, Skeleton } from "@/components/ui";
 import { formatDateTime, formatPercent } from "@/lib/format";
 
@@ -75,6 +76,8 @@ export default function HomePage() {
           reiniciando — os números aparecem assim que a conexão for restabelecida.
         </Card>
       ) : null}
+
+      <MeuPainel />
 
       {/* Presidente */}
       <section className="grid gap-4 lg:grid-cols-3">

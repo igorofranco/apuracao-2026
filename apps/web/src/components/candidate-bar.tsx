@@ -14,7 +14,7 @@ export function CandidateBar({
 }) {
   const largura = maxVotos > 0 ? (candidato.votos / maxVotos) * 100 : 0;
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" data-testid="candidate-bar">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <NumeroBadge numero={candidato.numero} destaque={destaque} />

@@ -15,13 +15,17 @@ export function useResumo() {
   });
 }
 
-export function useResultado(params: ResultadoParams) {
+export function useResultado(
+  params: ResultadoParams,
+  options?: { retry?: number | boolean; enabled?: boolean },
+) {
   return useQuery({
     queryKey: resultadoKey(params),
     queryFn: ({ signal }) => api.resultado(params, signal),
     staleTime: 5_000,
     // Fallback de polling caso o SSE caia (o SSE faz updates imediatos via cache).
     refetchInterval: 30_000,
+    ...options,
   });
 }
 

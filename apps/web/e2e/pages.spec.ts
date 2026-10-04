@@ -241,6 +241,101 @@ test.describe("páginas", () => {
   }
 });
 
+test.describe("painel personalizado", () => {
+  const SELECAO = {
+    itens: [
+      { cargo: 1, uf: "br" },
+      { cargo: 3, uf: "mg" },
+      { cargo: 5, uf: "mg" },
+      { cargo: 3, uf: "sp" },
+      { cargo: 5, uf: "sp" },
+    ],
+    topN: 3,
+  };
+
+  async function capturar(page: Page, testInfo: { project: { name: string } }, nome: string) {
+    await page.waitForTimeout(700);
+    await semOverflowHorizontal(page);
+    await semRotulosCortados(page);
+    await page.addStyleTag({
+      content:
+        "*,*::before,*::after{animation:none!important;transition:none!important}",
+    });
+    const dir = `e2e/screenshots/${testInfo.project.name}`;
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({ path: `${dir}/${nome}.png`, fullPage: true });
+  }
+
+  test("estado vazio mostra atalhos e configuração", async ({ page }, testInfo) => {
+    const erros = monitorar(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByRole("heading", { name: "Meu painel" })).toBeVisible();
+    await expect(page.getByText("Começar com um atalho")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /MG \(majoritários\)/ }),
+    ).toBeVisible();
+
+    await capturar(page, testInfo, "painel-vazio");
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+
+  test("exibe as corridas escolhidas com top 3", async ({ page }, testInfo) => {
+    const erros = monitorar(page);
+    await page.addInitScript((cfg: unknown) => {
+      window.localStorage.setItem("apuracao-painel", JSON.stringify(cfg));
+    }, SELECAO);
+
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const cards = page.getByTestId("race-mini-card");
+    await expect(cards).toHaveCount(5);
+    for (const chave of ["1:br", "3:mg", "5:mg", "3:sp", "5:sp"]) {
+      await expect(page.locator(`[data-corrida="${chave}"]`)).toBeVisible();
+    }
+    // Cada card carregou seu resultado e mostra exatamente top 3 candidatos.
+    await expect(page.getByTestId("race-mini-card").getByTestId("candidate-bar")).toHaveCount(15, {
+      timeout: 20_000,
+    });
+    // A seleção sobrevive ao reload.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("race-mini-card")).toHaveCount(5);
+
+    await capturar(page, testInfo, "painel-personalizado");
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+
+  test("atalho, reordenação, top 5 e remoção", async ({ page }, testInfo) => {
+    const erros = monitorar(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    // Atalho adiciona as três corridas de MG de uma vez.
+    await page.getByRole("button", { name: /MG \(majoritários\)/ }).click();
+    await expect(page.getByTestId("race-mini-card")).toHaveCount(3);
+    const barras = page.getByTestId("race-mini-card").getByTestId("candidate-bar");
+    await expect(barras).toHaveCount(9, { timeout: 20_000 });
+
+    // Edita: muda para top 5.
+    await page.getByRole("button", { name: "Editar painel" }).click();
+    await page.getByRole("button", { name: "Top 5" }).click();
+    await expect(barras).toHaveCount(15, { timeout: 20_000 });
+
+    // Reordena: Governador MG sobe para a primeira posição.
+    await page.getByRole("button", { name: /Mover Governador Minas Gerais para cima/ }).click();
+    const chaves = await page
+      .getByTestId("race-mini-card")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-corrida")));
+    expect(chaves).toEqual(["3:mg", "1:br", "5:mg"]);
+
+    // Remove o Senador MG.
+    await page.getByRole("button", { name: /Remover Senador Minas Gerais/ }).click();
+    await expect(page.getByTestId("race-mini-card")).toHaveCount(2);
+
+    await capturar(page, testInfo, "painel-personalizado-editado");
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+});
+
 test.describe("interações", () => {
   test("troca de cargo na UF (SP)", async ({ page }, testInfo) => {
     const erros = monitorar(page);

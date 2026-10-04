@@ -309,7 +309,10 @@ function makeHistorico(eleicao, cargo, uf) {
 
 function buildResumo() {
   const corridas = [makeSummary(6257, 1, "br")];
-  for (const u of UFS) corridas.push(makeSummary(6259, 3, u.uf));
+  for (const u of UFS) {
+    corridas.push(makeSummary(6259, 3, u.uf));
+    corridas.push(makeSummary(6259, 5, u.uf));
+  }
   return { eleicao: ELEICOES, total: corridas.length, corridas };
 }
 
