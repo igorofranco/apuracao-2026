@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #f6f7fb;
+  --foreground: #0b1220;
+  --card: #ffffff;
+  --card-foreground: #0b1220;
+  --muted: #eef1f6;
+  --muted-foreground: #5b6472;
+  --border: #e2e6ee;
+  --primary: #016b4d;
+  --primary-foreground: #ffffff;
+  --accent: #e6af0d;
+  --accent-foreground: #3a2c00;
+  --danger: #b42318;
+  --info: #1d4ed8;
+  --success: #067647;
+  --ring: #016b4d;
+}
+
+.dark {
+  --background: #070b16;
+  --foreground: #eef2f9;
+  --card: #0d1424;
+  --card-foreground: #eef2f9;
+  --muted: #141c2e;
+  --muted-foreground: #93a0b5;
+  --border: #1d2a44;
+  --primary: #22c98a;
+  --primary-foreground: #04130d;
+  --accent: #f2c14e;
+  --accent-foreground: #2a1f00;
+  --danger: #ff6b5e;
+  --info: #60a5fa;
+  --success: #34d399;
+  --ring: #22c98a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-success: var(--success);
+  --color-ring: var(--ring);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+.animate-live {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

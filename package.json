@@ -1,0 +1,38 @@
+{
+  "name": "apuracao-2026",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "concurrently -n collector,web -c blue,green \"npm:dev:collector\" \"npm:dev:web\"",
+    "dev:collector": "npm run dev --workspace @apuracao/collector",
+    "dev:web": "npm run dev --workspace @apuracao/web",
+    "build": "npm run build --workspace @apuracao/web",
+    "start:collector": "node apps/collector/src/index.ts",
+    "start:web": "npm run start --workspace @apuracao/web",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:reload": "pm2 reload ecosystem.config.cjs",
+    "pm2:logs": "pm2 logs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run typecheck && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "concurrently": "^10.0.5",
+    "eslint": "^9.39.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.47.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
