@@ -21,6 +21,12 @@ describe("normalizeResultado", () => {
     expect(race.candidatos[0]?.posicao).toBe(1);
   });
 
+  it("ordena alfabeticamente quando não há votos computados", () => {
+    const nomes = race.candidatos.map((c) => c.nomeUrna);
+    const ordenado = [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    expect(nomes).toEqual(ordenado);
+  });
+
   it("converte datas no horário de Brasília", () => {
     expect(race.atualizadoEm).toBe("2026-10-03T14:47:37-03:00");
   });
@@ -36,11 +42,21 @@ describe("normalizeResultado", () => {
   });
 
   it("define liderança quando há votos computados", () => {
-    const comVotos = structuredClone(race);
+    const rawClone = structuredClone(raw) as {
+      carg: { agr: { par: { cand: { nmu?: string; vap?: string }[] }[] }[] }[];
+    };
+    for (const agr of rawClone.carg[0]!.agr) {
+      for (const par of agr.par) {
+        for (const cand of par.cand) {
+          if (cand.nmu === "FLAVIO BOLSONARO") cand.vap = "1234";
+        }
+      }
+    }
+    const comVotos = normalizeResultado(rawClone as never);
     comVotos.secoes.totalizadas = 1000;
-    comVotos.candidatos[0]!.votos = 1234;
     const resumo = summarizeRace(comVotos);
     expect(resumo.lider?.nomeUrna).toBe("FLAVIO BOLSONARO");
+    expect(resumo.lider?.votos).toBe(1234);
     expect(resumo.lider?.partido).toBe("PL");
   });
 });

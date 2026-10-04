@@ -15,6 +15,9 @@ export function CandidatesTable({
   const [expandido, setExpandido] = useState(false);
   const limite = expandido ? candidatos.length : limiteInicial;
   const visiveis = candidatos.slice(0, limite);
+  // Sem votos computados não há ranking; a coluna de posição é omitida e a
+  // lista fica em ordem alfabética (ver normalizeCandidatos).
+  const temVotos = candidatos.some((c) => c.votos > 0);
 
   return (
     <Card className="overflow-hidden">
@@ -22,7 +25,7 @@ export function CandidatesTable({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 font-medium">#</th>
+              {temVotos ? <th className="px-3 py-2 font-medium">#</th> : null}
               <th className="px-3 py-2 font-medium">Nº</th>
               <th className="px-3 py-2 font-medium">Candidato</th>
               <th className="px-3 py-2 font-medium">Partido</th>
@@ -37,7 +40,9 @@ export function CandidatesTable({
                 key={`${c.numero}-${c.sqcand ?? c.nome}`}
                 className="border-b border-border/60 last:border-0 hover:bg-muted/40"
               >
-                <td className="tabular px-3 py-2 text-muted-foreground">{c.posicao}</td>
+                {temVotos ? (
+                  <td className="tabular px-3 py-2 text-muted-foreground">{c.posicao}</td>
+                ) : null}
                 <td className="tabular px-3 py-2 font-semibold">{c.numero}</td>
                 <td className="px-3 py-2">
                   <div className="font-medium">{c.nomeUrna}</div>

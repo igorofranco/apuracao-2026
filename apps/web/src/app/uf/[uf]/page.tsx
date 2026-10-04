@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ELEICAO_2026,
   cargosDaUf,
@@ -19,15 +19,18 @@ import { Badge, Card, Progress, Skeleton, buttonClass } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { formatDateTime, formatPercent } from "@/lib/format";
 
-export default function UfPage() {
+function UfContent() {
   const params = useParams<{ uf: string }>();
+  const search = useSearchParams();
+  const router = useRouter();
   const uf = (params.uf ?? "").toLowerCase();
   const ufInfo = getUf(uf);
   const cargos = useMemo(() => (isUf(uf) ? cargosDaUf(uf) : []), [uf]);
+  const cargoParam = Number(search.get("cargo"));
   const [cargoSel, setCargoSel] = useState<number | null>(null);
 
   const cargoAtivo: Cargo | undefined =
-    cargos.find((c) => c.codigo === cargoSel) ?? cargos[0];
+    cargos.find((c) => c.codigo === (cargoSel ?? cargoParam)) ?? cargos[0];
 
   const resultadoParams = cargoAtivo
     ? { eleicao: ELEICAO_2026.eleicoes.estadual, cargo: cargoAtivo.codigo, uf }
@@ -87,7 +90,10 @@ export default function UfPage() {
           <button
             key={c.codigo}
             type="button"
-            onClick={() => setCargoSel(c.codigo)}
+            onClick={() => {
+              setCargoSel(c.codigo);
+              router.replace(`/uf/${uf}?cargo=${c.codigo}`);
+            }}
             className={cn(
               buttonClass("ghost", "px-3 py-1.5"),
               cargoAtivo?.codigo === c.codigo &&
@@ -163,5 +169,20 @@ export default function UfPage() {
         )}
       </section>
     </div>
+  );
+}
+
+export default function UfPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-80 w-full" />
+        </div>
+      }
+    >
+      <UfContent />
+    </Suspense>
   );
 }

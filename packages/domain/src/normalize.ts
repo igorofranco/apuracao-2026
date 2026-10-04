@@ -130,8 +130,8 @@ function normalizeCandidatos(raw: RawResultado): CandidateResult[] {
               : null,
           coligacao: isColigacao ? (agr.com ?? agr.nm ?? null) : null,
           composicao: agr.com ?? null,
-          votos: cand.vap ?? 0,
-          percentual: cand.pvap ?? 0,
+          votos: toNumber(cand.vap),
+          percentual: toNumber(cand.pvap),
           posicao: 0,
           eleito: toBool(cand.e),
           situacao: cand.st ?? null,
@@ -142,7 +142,12 @@ function normalizeCandidatos(raw: RawResultado): CandidateResult[] {
     }
   }
 
-  candidatos.sort((a, b) => b.votos - a.votos);
+  // Ranking por votos; empates (inclusive todos zerados) caem na ordem
+  // alfabética do nome de urna — evita expor a ordem arbitrária do arquivo do TSE.
+  candidatos.sort(
+    (a, b) =>
+      b.votos - a.votos || a.nomeUrna.localeCompare(b.nomeUrna, "pt-BR"),
+  );
   candidatos.forEach((c, i) => {
     c.posicao = i + 1;
   });
