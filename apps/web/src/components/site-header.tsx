@@ -30,7 +30,11 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
+        <Link
+          href="/"
+          aria-label="Apuração 2026 — início"
+          className="flex items-center gap-2 font-semibold"
+        >
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Vote className="h-4 w-4" />
           </span>

@@ -16,7 +16,7 @@ export function TotalizadasCard({
         <span className="text-sm font-medium">{label}</span>
         <span className="tabular text-lg font-semibold">{formatPercent(value)}</span>
       </div>
-      <Progress value={value} />
+      <Progress value={value} label="Seções totalizadas" />
     </Card>
   );
 }

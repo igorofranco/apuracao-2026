@@ -19,7 +19,11 @@ export function TurnoutPanel({ race }: { race: RaceResult }) {
         </span>
       </div>
 
-      <Progress value={secoes.percentualTotalizadas} className="mb-1" />
+      <Progress
+        value={secoes.percentualTotalizadas}
+        label="Seções totalizadas"
+        className="mb-1"
+      />
       <div className="mb-4 text-xs text-muted-foreground">
         {formatInt(secoes.totalizadas)} de {formatInt(secoes.total)} seções totalizadas
       </div>

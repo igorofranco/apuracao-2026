@@ -101,29 +101,44 @@ export function BrazilMap({
   };
 
   return (
-    <div ref={containerRef} className={cn("relative w-full", className)}>
+    <div
+      ref={containerRef}
+      className={cn("relative aspect-square w-full", className)}
+    >
       <svg
         viewBox={`0 0 ${VIEW} ${VIEW}`}
-        className="h-auto w-full"
-        role="img"
+        className="block h-auto w-full"
+        role="group"
         aria-label="Mapa do Brasil por unidade da federação"
       >
         {paths.map(({ uf, d }) => {
           const dado = porUf.get(uf);
           const nome = getUf(uf)?.nome ?? uf.toUpperCase();
+          if (!uf) {
+            return (
+              <path
+                key={d.slice(0, 12)}
+                d={d}
+                fill="var(--muted)"
+                stroke="var(--background)"
+                strokeWidth={0.8}
+              />
+            );
+          }
           return (
-            <path
-              key={uf || d.slice(0, 12)}
-              d={d}
-              fill={cor(dado)}
-              stroke="var(--background)"
-              strokeWidth={0.8}
-              className={uf ? "cursor-pointer transition-opacity hover:opacity-80" : ""}
-              tabIndex={uf ? 0 : -1}
-              aria-label={nome}
-              onClick={() => uf && router.push(`/uf/${uf}`)}
+            <a
+              key={uf}
+              href={`/uf/${uf}`}
+              aria-label={`Ver apuração de ${nome}`}
+              className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              onClick={(e) => {
+                // Intercepta só o clique simples; preserva abrir em nova aba etc.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                e.preventDefault();
+                router.push(`/uf/${uf}`);
+              }}
               onMouseMove={(e) => {
-                if (!dado || !uf) return;
+                if (!dado) return;
                 const rect = containerRef.current?.getBoundingClientRect();
                 setHover({
                   x: e.clientX - (rect?.left ?? 0),
@@ -132,7 +147,15 @@ export function BrazilMap({
                 });
               }}
               onMouseLeave={() => setHover(null)}
-            />
+            >
+              <path
+                d={d}
+                fill={cor(dado)}
+                stroke="var(--background)"
+                strokeWidth={0.8}
+                className="transition-opacity hover:opacity-80"
+              />
+            </a>
           );
         })}
       </svg>

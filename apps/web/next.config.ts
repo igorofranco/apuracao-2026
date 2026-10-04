@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 /**
@@ -13,6 +14,24 @@ const nextConfig: NextConfig = {
   env: {
     // Browser fala na mesma origem; o proxy é feito aqui (dev/sem nginx) ou no nginx.
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? "",
+  },
+  experimental: {
+    // Inline do Tailwind no HTML: elimina a requisição de CSS que bloqueia a
+    // renderização (FCP/LCP). Indicado para CSS atômico (poucos KB).
+    inlineCss: true,
+  },
+  turbopack: {
+    rules: {
+      // O Next injeta `next-polyfill-module` em todo build mesmo com alvos
+      // modernos (vercel/next.js#86785). Como o browserslist (chrome/edge/
+      // firefox 111+, safari 16.4+) já cobre tudo que ele fornece, esvaziamos
+      // o módulo para não servir JavaScript legado (Lighthouse).
+      "**/polyfill-module.js": {
+        condition: { all: ["browser", "production"] },
+        loaders: [path.join(process.cwd(), "empty-polyfill-module-loader.cjs")],
+        as: "*.js",
+      },
+    },
   },
   async rewrites() {
     if (!API_PROXY_TARGET) return [];

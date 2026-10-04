@@ -69,10 +69,12 @@ export function buttonClass(variant: ButtonVariant = "primary", className?: stri
 
 export function Progress({
   value,
+  label = "Progresso",
   className,
   barClassName,
 }: {
   value: number;
+  label?: string;
   className?: string;
   barClassName?: string;
 }) {
@@ -81,6 +83,7 @@ export function Progress({
     <div
       className={cn("h-2 w-full overflow-hidden rounded-full bg-muted", className)}
       role="progressbar"
+      aria-label={label}
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}

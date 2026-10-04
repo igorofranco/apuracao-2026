@@ -86,25 +86,30 @@ export default function HomePage() {
             </span>
           </div>
           <p className="mb-3 text-xs text-muted-foreground">das seções totalizadas</p>
-          <Progress value={presidente.data?.secoes.percentualTotalizadas ?? 0} />
-          {lider ? (
-            <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                Liderança
+          <Progress
+            value={presidente.data?.secoes.percentualTotalizadas ?? 0}
+            label="Seções totalizadas"
+          />
+          <div className="mt-4 min-h-[4.5rem]">
+            {lider ? (
+              <div className="rounded-lg border border-border bg-muted/40 p-3">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Liderança
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <NumeroBadge numero={lider.numero} destaque tamanho="md" />
+                  <span className="min-w-0 truncate font-semibold">{lider.nomeUrna}</span>
+                  <span className="ml-auto tabular font-semibold">
+                    {formatPercent(lider.percentual)}
+                  </span>
+                </div>
               </div>
-              <div className="mt-1 flex items-center gap-2">
-                <NumeroBadge numero={lider.numero} destaque tamanho="md" />
-                <span className="min-w-0 truncate font-semibold">{lider.nomeUrna}</span>
-                <span className="ml-auto tabular font-semibold">
-                  {formatPercent(lider.percentual)}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-muted-foreground">
-              Apuração ainda não iniciada.
-            </p>
-          )}
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Apuração ainda não iniciada.
+              </p>
+            )}
+          </div>
           <Link
             href="/presidente"
             className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
@@ -122,8 +127,8 @@ export default function HomePage() {
           </div>
           {presidente.isLoading ? (
             <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-9 w-full" />
               ))}
             </div>
           ) : presidente.data ? (
@@ -158,7 +163,7 @@ export default function HomePage() {
         <Card className="min-w-0 lg:col-span-2 p-5">
           <h2 className="mb-3 text-lg font-semibold">Andamento por estado</h2>
           {corridas.length === 0 ? (
-            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-[420px] w-full" />
           ) : (
             <ul className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
               {UFS.map((u) => {
@@ -222,7 +227,11 @@ export default function HomePage() {
                     <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </div>
-                <Progress value={r?.percentualApurado ?? 0} className="mt-2 h-1.5" />
+                <Progress
+                  value={r?.percentualApurado ?? 0}
+                  label={`Seções totalizadas em ${u.nome}`}
+                  className="mt-2 h-1.5"
+                />
               </Link>
             );
           })}
