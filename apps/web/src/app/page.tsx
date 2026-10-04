@@ -163,12 +163,12 @@ export default function HomePage() {
           <BrazilMap dados={mapaDados} modo="lideranca" />
         </Card>
 
-        <Card className="min-w-0 lg:col-span-2 p-5">
+        <Card className="flex min-w-0 flex-col lg:col-span-2 p-5">
           <h2 className="mb-3 text-lg font-semibold">Andamento por estado</h2>
           {corridas.length === 0 ? (
-            <Skeleton className="h-[420px] w-full" />
+            <Skeleton className="h-[420px] w-full lg:h-auto lg:flex-1" />
           ) : (
-            <ul className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+            <ul className="max-h-[420px] space-y-2 overflow-y-auto pr-1 lg:max-h-none lg:min-h-0 lg:flex-1">
               {UFS.map((u) => {
                 const r = porChave.get(`3:${u.uf}`);
                 return (
