@@ -4,6 +4,7 @@ import type {
   RaceSummary,
   Snapshot,
 } from "@apuracao/domain";
+import { withEleicaoMatematica } from "@apuracao/domain";
 import type { Cargo, Uf } from "@apuracao/shared";
 
 // Mesma origem por padrão (nginx proxya /api para o collector em produção).
@@ -73,8 +74,12 @@ const qs = (params: object): string => {
 export const api = {
   resumo: (signal?: AbortSignal) => getJson<ResumoResponse>("/api/resumo", signal),
   config: (signal?: AbortSignal) => getJson<ConfigResponse>("/api/config", signal),
-  resultado: (params: ResultadoParams, signal?: AbortSignal) =>
-    getJson<RaceResult>(`/api/resultado${qs(params)}`, signal),
+  resultado: async (params: ResultadoParams, signal?: AbortSignal) =>
+    // Deriva a eleição matemática no cliente também, para a UI ficar correta
+    // mesmo com um backend que não calcule a flag (ex.: mock dos testes).
+    withEleicaoMatematica(
+      await getJson<RaceResult>(`/api/resultado${qs(params)}`, signal),
+    ),
   historico: (
     params: Pick<ResultadoParams, "eleicao" | "cargo" | "uf">,
     signal?: AbortSignal,

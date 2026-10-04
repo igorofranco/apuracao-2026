@@ -124,6 +124,10 @@ function makeCandidatos(cargo, chave) {
     : cargo === 7 ? 260_000
     : 90_000;
   const decay = major ? 0.62 : 0.86;
+  // Cenário "eleição matemática": nos majoritários o líder abre uma vantagem
+  // grande (decay do 2º colocado), o que o torna matematicamente eleito já com
+  // parte das seções apuradas — usado para validar o badge na UI/E2E.
+  const decaimentoLider = cargo === 1 ? 0.35 : 0.45;
   const off = hash(chave) % NOMES.length;
 
   let votos = base * (0.7 + (hash(`${chave}:${cargo}`) % 40) / 100);
@@ -131,7 +135,10 @@ function makeCandidatos(cargo, chave) {
   for (let i = 0; i < total; i++) {
     const partido = PARTIDOS[(off + i) % PARTIDOS.length];
     const pessoa = NOMES[(off + i) % NOMES.length];
-    const eleito = major ? i === 0 : i < 4;
+    // Majoritário: a apuração ainda está em curso (ninguém "eleito" oficialmente
+    // no mock) — quem estiver garantido aparece como "matematicamente eleito".
+    // Proporcional: os 4 primeiros ficam marcados.
+    const eleito = major ? false : i < 4;
     candidatos.push({
       numero: String((cargo === 1 ? 10 : 10) + i * 3),
       sqcand: null,
@@ -145,12 +152,13 @@ function makeCandidatos(cargo, chave) {
       votos: Math.round(votos),
       percentual: 0,
       posicao: i + 1,
-      eleito: major ? eleito : eleito,
+      eleito,
+      matematicamenteEleito: false,
       situacao: eleito ? "Eleito" : i < (major ? 2 : 8) ? "Não eleito" : "Suplente",
       vice: major ? NOMES[(off + total + i) % NOMES.length].urna : null,
       suplentes: cargo === 5 ? [NOMES[(off + i * 2) % NOMES.length].urna] : [],
     });
-    votos *= decay;
+    votos *= i === 0 && major ? decaimentoLider : decay;
   }
 
   const soma = candidatos.reduce((a, c) => a + c.votos, 0);
@@ -166,8 +174,11 @@ function makeRace({ eleicao, cargo, uf, municipio, zona }) {
   const { candidatos, soma, totalVotos } = makeCandidatos(cargo, chave);
   const abrangencia = zona ? "zona" : municipio ? "mu" : uf === "br" ? "br" : "uf";
 
+  // Majoritário: quase totalizado, para o cenário de "eleição matemática" já
+  // aparecer (líder inalcançável). Demais: percentual variado.
+  const major = MAJORITARIOS.has(cargo);
   const pct =
-    uf === "br" && !municipio && !zona
+    major
       ? 99.2
       : round2(55 + (hash(`${chave}:${cargo}`) % 450) / 10);
 

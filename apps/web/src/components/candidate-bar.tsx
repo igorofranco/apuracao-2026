@@ -16,7 +16,7 @@ export function CandidateBar({
   return (
     <div className="space-y-1" data-testid="candidate-bar">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
           <NumeroBadge numero={candidato.numero} destaque={destaque} />
           <span className="min-w-0 truncate text-sm font-medium">
             {candidato.nomeUrna}
@@ -27,6 +27,14 @@ export function CandidateBar({
           {candidato.eleito ? (
             <span className="shrink-0 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
               ELEITO
+            </span>
+          ) : candidato.matematicamenteEleito ? (
+            <span
+              data-testid="badge-matematicamente-eleito"
+              title="Matematicamente eleito: não pode mais ser alcançado mesmo que todos os votos restantes sejam dos adversários"
+              className="shrink-0 rounded-full bg-accent/20 px-2 py-0.5 text-[10px] font-semibold text-accent-foreground dark:text-accent"
+            >
+              MATEMATICAMENTE ELEITO
             </span>
           ) : null}
         </div>

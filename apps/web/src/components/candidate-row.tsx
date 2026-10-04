@@ -1,5 +1,6 @@
 import type { CandidateResult } from "@apuracao/domain";
 import { Badge } from "@/components/ui";
+import { MathBadge } from "@/components/math-badge";
 import { cn } from "@/lib/utils";
 import { formatInt, formatPercent } from "@/lib/format";
 
@@ -34,6 +35,9 @@ export function CandidateRow({
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{candidato.nomeUrna}</span>
           {candidato.eleito ? <Badge variant="success">Eleito</Badge> : null}
+          {candidato.matematicamenteEleito ? (
+            <MathBadge className="shrink-0" />
+          ) : null}
         </div>
         <div className="truncate text-xs text-muted-foreground">
           {candidato.siglaPartido}

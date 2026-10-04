@@ -122,6 +122,7 @@ function normalizeCandidatos(raw: RawResultado): CandidateResult[] {
           percentual: toNumber(cand.pvap),
           posicao: 0,
           eleito: toBool(cand.e),
+          matematicamenteEleito: false,
           situacao: cand.st ?? null,
           vice: vice ? (vice.nmu ?? vice.nm ?? null) : null,
           suplentes,

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CandidateResult } from "@apuracao/domain";
 import { Badge, buttonClass, Card } from "@/components/ui";
+import { MathBadge } from "@/components/math-badge";
 import { formatInt, formatPercent } from "@/lib/format";
 
 export function CandidatesTable({
@@ -57,13 +58,16 @@ export function CandidatesTable({
                   {formatPercent(c.percentual)}
                 </td>
                 <td className="px-3 py-2">
-                  {c.eleito ? (
-                    <Badge variant="success">Eleito</Badge>
-                  ) : c.situacao ? (
-                    <span className="text-xs text-muted-foreground">{c.situacao}</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {c.eleito ? (
+                      <Badge variant="success">Eleito</Badge>
+                    ) : c.situacao ? (
+                      <span className="text-xs text-muted-foreground">{c.situacao}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                    {c.matematicamenteEleito ? <MathBadge /> : null}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -85,6 +89,7 @@ export function CandidatesTable({
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium">{c.nomeUrna}</span>
                 {c.eleito ? <Badge variant="success">Eleito</Badge> : null}
+                {c.matematicamenteEleito ? <MathBadge className="shrink-0" /> : null}
               </div>
               <div className="truncate text-xs text-muted-foreground">
                 {c.siglaPartido}

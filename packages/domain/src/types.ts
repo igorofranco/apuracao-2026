@@ -24,7 +24,14 @@ export interface CandidateResult {
   percentual: number;
   /** Posição no ranking (1 = mais votado). */
   posicao: number;
+  /** Marcado como eleito pela totalização oficial (campo `e` do TSE). */
   eleito: boolean;
+  /**
+   * Eleito por projeção matemática: mesmo que todos os votos válidos ainda não
+   * apurados fossem para os adversários, este candidato continuaria entre os
+   * mais votados (ver `computeEleicaoMatematica`). Calculado no coletor.
+   */
+  matematicamenteEleito: boolean;
   situacao: string | null;
   vice: string | null;
   suplentes: string[];

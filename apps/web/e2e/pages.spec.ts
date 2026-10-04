@@ -386,4 +386,22 @@ test.describe("interações", () => {
 
     expect(erros, erros.join("\n")).toEqual([]);
   });
+
+  test("marca o candidato matematicamente eleito (Presidente)", async ({ page }) => {
+    const erros = monitorar(page);
+
+    await page.goto("/presidente", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText("Ao vivo").filter({ visible: true }).first(),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // O líder dispara no cenário do mock: aparece o badge próprio, distinto do
+    // "Eleito" oficial.
+    await expect(
+      page.getByTestId("badge-matematicamente-eleito").first(),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("MATEMATICAMENTE ELEITO").first()).toBeVisible();
+
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
 });

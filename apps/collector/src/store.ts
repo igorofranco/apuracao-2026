@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { RaceResult, RaceSummary, Snapshot } from "@apuracao/domain";
-import { raceKey, summarizeRace, snapshotFrom } from "@apuracao/domain";
+import { raceKey, summarizeRace, snapshotFrom, withEleicaoMatematica } from "@apuracao/domain";
 
 export interface RaceUpdate {
   key: string;
@@ -69,15 +69,18 @@ export class RaceStore extends EventEmitter {
   }
 
   setRace(race: RaceResult, at = new Date().toISOString()): RaceUpdate {
-    const key = raceKey(race);
-    const sig = signature(race);
+    // Marca a eleição matemática antes de guardar/assinar — assim o resultado
+    // servido já traz a flag (e a assinatura detecta quando ela muda).
+    const enriquecida = withEleicaoMatematica(race);
+    const key = raceKey(enriquecida);
+    const sig = signature(enriquecida);
     const changed = this.signatures.get(key) !== sig;
-    this.races.set(key, race);
+    this.races.set(key, enriquecida);
     this.signatures.set(key, sig);
     this.updatedAt.set(key, at);
 
     if (changed) {
-      const snap = snapshotFrom(race, at);
+      const snap = snapshotFrom(enriquecida, at);
       const list = this.snapshots.get(key) ?? [];
       list.push(snap);
       if (list.length > this.options.snapshotLimit) {
@@ -87,7 +90,7 @@ export class RaceStore extends EventEmitter {
       void this.options.repo?.save(snap);
     }
 
-    const update: RaceUpdate = { key, race, changed, at };
+    const update: RaceUpdate = { key, race: enriquecida, changed, at };
     if (changed) this.emit("update", update);
     return update;
   }

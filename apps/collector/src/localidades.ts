@@ -1,4 +1,4 @@
-import { normalizeResultado, type RaceResult } from "@apuracao/domain";
+import { normalizeResultado, withEleicaoMatematica, type RaceResult } from "@apuracao/domain";
 import type { TseClient } from "@apuracao/tse-client";
 import { AsyncCache } from "./async-cache.ts";
 
@@ -39,7 +39,7 @@ export class LocalidadesCache {
         municipio: p.municipio,
         zona: p.zona,
       });
-      return raw ? normalizeResultado(raw) : null;
+      return raw ? withEleicaoMatematica(normalizeResultado(raw)) : null;
     });
   }
 
