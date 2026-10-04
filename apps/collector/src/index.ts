@@ -25,10 +25,15 @@ async function main(): Promise<void> {
   const eleicoes = await resolverEleicoes(client, config, log);
 
   const repo = config.databaseUrl
-    ? await createPostgresRepo(config.databaseUrl)
+    ? await createPostgresRepo({ connectionString: config.databaseUrl, log })
     : undefined;
   const store = new RaceStore({ snapshotLimit: config.snapshotLimit, repo });
-  await store.hydrate();
+  if (repo) {
+    await store.hydrate();
+    log.info("histórico durável (Postgres) habilitado", {
+      retencaoDias: config.history.retentionDays,
+    });
+  }
 
   const targets = buildTargets(eleicoes);
   const poller = new Poller({ client, store, targets, eleicoes, config, log });
@@ -37,6 +42,10 @@ async function main(): Promise<void> {
   const bridge = config.redisUrl
     ? await RedisBridge.create(config.redisUrl, store, log)
     : undefined;
+  const redisOk = bridge ? await bridge.ping() : false;
+  if (bridge) {
+    log.info("Redis habilitado (fan-out de SSE entre instâncias)", { conectado: redisOk });
+  }
 
   const server = await buildServer({
     config,
@@ -47,7 +56,7 @@ async function main(): Promise<void> {
     localidades,
     eleicoes,
     log,
-    flags: { redis: Boolean(bridge), postgres: Boolean(repo) },
+    flags: { redis: Boolean(bridge), redisOk, postgres: Boolean(repo) },
   });
 
   await server.listen({ host: config.host, port: config.port });
@@ -63,12 +72,31 @@ async function main(): Promise<void> {
 
   poller.start();
 
+  // Retenção do histórico (limpa snapshots antigos no Postgres).
+  let pruneTimer: NodeJS.Timeout | undefined;
+  if (repo) {
+    const aplicarRetencao = async () => {
+      try {
+        const removidos = await store.prune(config.history.retentionDays);
+        if (removidos > 0) log.info("retenção do histórico aplicada", { removidos });
+      } catch (err) {
+        log.warn("falha ao aplicar retenção", {
+          erro: err instanceof Error ? err.message : String(err),
+        });
+      }
+    };
+    void aplicarRetencao();
+    pruneTimer = setInterval(aplicarRetencao, config.history.pruneIntervalMs);
+    pruneTimer.unref?.();
+  }
+
   // Sinaliza "pronto" para o PM2 (wait_ready).
   process.send?.("ready");
 
   const shutdown = async (signal: string) => {
     log.info("encerrando", { sinal: signal });
     poller.stop();
+    if (pruneTimer) clearInterval(pruneTimer);
     await server.close();
     await bridge?.close();
     process.exit(0);

@@ -14,6 +14,7 @@ export class RedisBridge {
   private readonly sub: import("ioredis").default;
   private readonly store: RaceStore;
   private readonly log?: Logger;
+  private conectado = true;
 
   private constructor(
     pub: import("ioredis").default,
@@ -37,13 +38,20 @@ export class RedisBridge {
   }
 
   private async init(): Promise<void> {
+    this.pub.on("error", (err) => {
+      this.conectado = false;
+      this.log?.warn("erro no Redis (pub)", { erro: err.message });
+    });
+
     this.store.on("update", (update: RaceUpdate) => {
       void this.pub
         .publish(
           CHANNEL,
           JSON.stringify({ instanceId: this.instanceId, update }),
         )
-        .catch(() => {});
+        .catch(() => {
+          this.conectado = false;
+        });
     });
 
     await this.sub.subscribe(CHANNEL);
@@ -57,8 +65,23 @@ export class RedisBridge {
         // ignora mensagens malformadas
       }
     });
-    console.log("[collector] Redis pub/sub ativo para fan-out de SSE");
+    this.conectado = true;
     this.log?.info("Redis pub/sub ativo para fan-out de SSE");
+  }
+
+  /** Verifica a conectividade com o Redis (para /api/status). */
+  async ping(): Promise<boolean> {
+    try {
+      const pong = await this.pub.ping();
+      this.conectado = pong === "PONG";
+    } catch {
+      this.conectado = false;
+    }
+    return this.conectado;
+  }
+
+  get ok(): boolean {
+    return this.conectado;
   }
 
   async close(): Promise<void> {

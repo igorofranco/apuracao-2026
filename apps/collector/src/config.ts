@@ -46,6 +46,14 @@ export interface CollectorConfig {
   redisUrl?: string;
   databaseUrl?: string;
   snapshotLimit: number;
+  history: {
+    /** Retenção dos snapshots no Postgres (dias). */
+    retentionDays: number;
+    /** Máximo de pontos retornados por consulta de histórico. */
+    maxPoints: number;
+    /** Intervalo de limpeza da retenção (ms). */
+    pruneIntervalMs: number;
+  };
   corsOrigins: string[];
   rateLimit: { max: number; windowMs: number };
   /** Nº máximo de conexões SSE simultâneas por IP. */
@@ -81,6 +89,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollectorConfi
     redisUrl: env.REDIS_URL,
     databaseUrl: env.DATABASE_URL,
     snapshotLimit: int("SNAPSHOT_LIMIT", 500),
+    history: {
+      retentionDays: int("HISTORY_RETENTION_DAYS", 7),
+      maxPoints: int("HISTORY_MAX_POINTS", 5000),
+      pruneIntervalMs: int("HISTORY_PRUNE_INTERVAL_MS", 6 * 60 * 60 * 1000),
+    },
     corsOrigins: lista("CORS_ORIGIN", ["http://localhost:3000"]),
     rateLimit: {
       max: int("RATE_LIMIT_MAX", 300),

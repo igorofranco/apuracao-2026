@@ -20,7 +20,7 @@ export interface ServerDeps {
   localidades: LocalidadesCache;
   eleicoes: EleicoesResolvidas;
   log: Logger;
-  flags: { redis: boolean; postgres: boolean };
+  flags: { redis: boolean; redisOk: boolean; postgres: boolean };
 }
 
 function query(req: { query: unknown }): Record<string, string> {
@@ -60,7 +60,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     ultimaAtualizacao: deps.store.latestUpdate(),
     eleicoes: deps.eleicoes,
     redis: deps.flags.redis,
+    redisConectado: deps.flags.redisOk,
     postgres: deps.flags.postgres,
+    historyRetentionDays: deps.config.history.retentionDays,
     localidadesEmCache: deps.localidades.tamanho,
     sseClientes: [...ssePorIp.values()].reduce((a, b) => a + b, 0),
     poller: deps.poller.stats,
@@ -141,7 +143,11 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const eleicao = toInt(q.eleicao, deps.eleicoes.federal.cd);
     const cargo = toInt(q.cargo, 1);
     const uf = (q.uf ?? "br").toLowerCase();
-    const snapshots = deps.store.historico(eleicao, cargo, uf);
+    const snapshots = await deps.store.historicoAsync(eleicao, cargo, uf, {
+      since: q.since,
+      limit: deps.config.history.maxPoints,
+      retentionDays: deps.config.history.retentionDays,
+    });
     if (snapshots.length === 0) {
       return reply.code(404).send({ error: "sem histórico para a corrida" });
     }

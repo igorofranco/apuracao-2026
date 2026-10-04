@@ -88,10 +88,23 @@ Copie `.env.example` e ajuste. As principais:
 | `MAX_SSE_PER_IP` | Conexões SSE simultâneas por IP | `10` |
 | `REDIS_URL` | Habilita pub/sub (múltiplas instâncias) | — |
 | `DATABASE_URL` | Persiste snapshots (histórico durável) | — |
+| `HISTORY_RETENTION_DAYS` / `HISTORY_MAX_POINTS` | Retenção e limite de pontos do histórico | `7` / `5000` |
 | `API_PROXY_TARGET` | Alvo do proxy `/api` do Next (**build-time**) | `http://127.0.0.1:8787` |
 
 Sem Redis/Postgres o collector funciona normalmente com cache em memória
 (histórico em ring buffer e SSE local).
+
+### Postgres e Redis (opcionais)
+
+- **Postgres (`DATABASE_URL`)** — *recomendado*: histórico **durável**. Cada nova
+  geração é gravada e `/api/historico` passa a consultar por período (sobrevive a
+  restart). Há **retenção automática** (`HISTORY_RETENTION_DAYS`, padrão 7 dias,
+  limpeza a cada `HISTORY_PRUNE_INTERVAL_MS`). A tabela/índice são criados no boot.
+- **Redis (`REDIS_URL`)**: pub/sub para **fan-out de SSE quando houver mais de uma
+  instância do collector**. Com uma única instância não há ganho — pode ficar
+  desligado. O status aparece em `/api/status` (`redis`, `redisConectado`).
+
+O `web` é stateless e escala horizontalmente sem configuração extra.
 
 ## API do collector
 

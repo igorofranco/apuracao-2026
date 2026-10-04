@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { TseClient } from "@apuracao/tse-client";
-import { normalizeResultado, type RawResultado } from "@apuracao/domain";
+import { normalizeResultado, type RawResultado, type Snapshot } from "@apuracao/domain";
 import { loadConfig } from "../src/config.ts";
 import { LocalidadesCache } from "../src/localidades.ts";
 import { Logger } from "../src/logger.ts";
 import { MunicipiosCache } from "../src/municipios.ts";
 import { buildServer } from "../src/server.ts";
-import { RaceStore } from "../src/store.ts";
+import { RaceStore, type SnapshotRepository } from "../src/store.ts";
 import type { Poller, PollerStats } from "../src/poller.ts";
 import type { EleicoesResolvidas } from "../src/eleicoes.ts";
 
@@ -104,7 +104,7 @@ async function montarApp(rateMax = 1000) {
     localidades: new LocalidadesCache(client, 60_000),
     eleicoes,
     log,
-    flags: { redis: false, postgres: false },
+    flags: { redis: false, redisOk: false, postgres: false },
   });
   return { app, store, client };
 }
@@ -160,5 +160,66 @@ describe("collector HTTP", () => {
     }
     expect(respostas).toContain(429);
     await app.close();
+  });
+});
+
+function fakeRepo(): SnapshotRepository & { snaps: Snapshot[]; pruned: number[] } {
+  const snaps: Snapshot[] = [];
+  const pruned: number[] = [];
+  return {
+    snaps,
+    pruned,
+    save(s) {
+      snaps.push(s);
+    },
+    async loadRecent() {
+      return snaps;
+    },
+    async history(f) {
+      return snaps.filter(
+        (s) => s.eleicao === f.eleicao && s.cargo === f.cargo && s.uf === f.uf,
+      );
+    },
+    async prune(days) {
+      pruned.push(days);
+      return 3;
+    },
+  };
+}
+
+describe("histórico durável (Postgres)", () => {
+  it("persiste somente quando a geração muda", () => {
+    const repo = fakeRepo();
+    const store = new RaceStore({ snapshotLimit: 100, repo });
+    store.setRace(normalizeResultado(raw(1, "br", "10")));
+    expect(repo.snaps.length).toBe(1);
+    store.setRace(normalizeResultado(raw(1, "br", "10"))); // mesma assinatura
+    expect(repo.snaps.length).toBe(1);
+  });
+
+  it("serve o histórico do repositório e cai para a memória", async () => {
+    const repo = fakeRepo();
+    const store = new RaceStore({ snapshotLimit: 100, repo });
+    store.setRace(normalizeResultado(raw(1, "br", "10")));
+    const doRepo = await store.historicoAsync(6257, 1, "br", {
+      limit: 10,
+      retentionDays: 7,
+    });
+    expect(doRepo.length).toBe(1);
+
+    const semRepo = await new RaceStore({ snapshotLimit: 100 }).historicoAsync(
+      6257,
+      1,
+      "br",
+      { limit: 10, retentionDays: 7 },
+    );
+    expect(semRepo.length).toBe(0);
+  });
+
+  it("delega a retenção ao repositório", async () => {
+    const repo = fakeRepo();
+    const store = new RaceStore({ snapshotLimit: 100, repo });
+    await expect(store.prune(7)).resolves.toBe(3);
+    expect(repo.pruned).toEqual([7]);
   });
 });

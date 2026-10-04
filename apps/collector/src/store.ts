@@ -13,6 +13,16 @@ export interface RaceUpdate {
 export interface SnapshotRepository {
   save(snapshot: Snapshot): void | Promise<void>;
   loadRecent(limit: number): Promise<Snapshot[]>;
+  /** Série histórica por período (opcional). */
+  history?(filter: {
+    eleicao: number;
+    cargo: number;
+    uf: string;
+    since?: string;
+    limit: number;
+  }): Promise<Snapshot[]>;
+  /** Retenção: remove antigos (opcional). Retorna quantos foram removidos. */
+  prune?(retentionDays: number): Promise<number>;
 }
 
 /** Assinatura curta para detectar mudança real em um resultado. */
@@ -96,6 +106,42 @@ export class RaceStore extends EventEmitter {
 
   historico(eleicao: number, cargo: number, uf: string): Snapshot[] {
     return this.snapshots.get(`${eleicao}:${cargo}:${uf}`) ?? [];
+  }
+
+  /**
+   * Histórico de uma corrida: usa o Postgres quando disponível (mais completo,
+   * sobrevive a restart) e cai para a memória como fallback.
+   */
+  async historicoAsync(
+    eleicao: number,
+    cargo: number,
+    uf: string,
+    options: { since?: string; limit: number; retentionDays: number },
+  ): Promise<Snapshot[]> {
+    const repo = this.options.repo;
+    if (repo?.history) {
+      try {
+        const lista = await repo.history({
+          eleicao,
+          cargo,
+          uf,
+          since:
+            options.since ??
+            new Date(Date.now() - options.retentionDays * 86_400_000).toISOString(),
+          limit: options.limit,
+        });
+        if (lista.length > 0) return lista;
+      } catch {
+        // cai para a memória
+      }
+    }
+    return this.historico(eleicao, cargo, uf);
+  }
+
+  /** Executa a retenção no repositório (se suportado). Retorna removidos. */
+  async prune(retentionDays: number): Promise<number> {
+    if (!this.options.repo?.prune) return 0;
+    return this.options.repo.prune(retentionDays);
   }
 
   lastUpdateAt(eleicao: number, cargo: number, uf: string): string | undefined {
