@@ -24,3 +24,8 @@ tmp/
 # misc
 .DS_Store
 coverage/
+
+# e2e (Playwright)
+apps/web/e2e/screenshots/
+apps/web/e2e/.artifacts/
+apps/web/e2e/.report/
