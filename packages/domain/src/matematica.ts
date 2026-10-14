@@ -203,16 +203,68 @@ export function computeEleicaoMatematica(
 }
 
 /**
+ * `true` quando a situação textual publicada pelo TSE é exatamente "eleito"/
+ * "eleita". Usado para limpar o rótulo ao desfazer uma marcação indevida de
+ * eleição — sem tocar em situações com outro significado (ex.: "2º turno").
+ */
+function situacaoIndicaEleito(situacao: string | null): boolean {
+  if (!situacao) return false;
+  const limpa = situacao
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  return limpa === "eleito" || limpa === "eleita";
+}
+
+/**
+ * Corrige marcações de "eleito" incompatíveis com o número de vagas do cargo.
+ *
+ * Cargos majoritários elegem um número fixo de candidatos (Presidente e
+ * Governador: 1; Senador: 2). Eventualmente a totalização oficial marca mais
+ * candidatos como eleitos do que há vagas — visto em Presidente, em que o 1º e
+ * o 2º vinham como eleitos. Como a eleição é decidida pela votação, mantemos
+ * apenas os mais votados até o limite de vagas e limpamos a marca (e a situação
+ * textual) dos demais. Cargos proporcionais não têm número fixo de vagas e não
+ * são afetados.
+ */
+export function corrigirEleitosOficiais(race: RaceResult): RaceResult {
+  const cargo = getCargo(race.cargo);
+  const vagas = cargo?.majoritario ? cargo.vagas : undefined;
+  if (!vagas) return race;
+
+  // `candidatos` já vem ordenado por votação; os `vagas` primeiros eleitos são
+  // os legítimos.
+  const eleitos = race.candidatos.filter((c) => c.eleito);
+  if (eleitos.length <= vagas) return race;
+  const mantidos = new Set(eleitos.slice(0, vagas).map((c) => c.numero));
+
+  let mudou = false;
+  const candidatos: CandidateResult[] = race.candidatos.map((c) => {
+    if (!c.eleito || mantidos.has(c.numero)) return c;
+    mudou = true;
+    return {
+      ...c,
+      eleito: false,
+      situacao: situacaoIndicaEleito(c.situacao) ? null : c.situacao,
+    };
+  });
+  return mudou ? { ...race, candidatos } : race;
+}
+
+/**
  * Cópia de `race` com `matematicamenteEleito` e `matematicamenteSegundoTurno`
  * derivados do cálculo. Candidatos já eleitos oficialmente nunca são marcados
- * (a marca do TSE prevalece).
+ * (a marca do TSE prevalece). Antes do cálculo, a marcação oficial de eleição é
+ * saneada contra o número de vagas do cargo (ver `corrigirEleitosOficiais`).
  */
 export function withEleicaoMatematica(race: RaceResult): RaceResult {
-  const { numeros, numerosSegundoTurno } = computeEleicaoMatematica(race);
+  const consistente = corrigirEleitosOficiais(race);
+  const { numeros, numerosSegundoTurno } = computeEleicaoMatematica(consistente);
   const eleitos = new Set(numeros);
   const segundo = new Set(numerosSegundoTurno);
   let mudou = false;
-  const candidatos: CandidateResult[] = race.candidatos.map((c) => {
+  const candidatos: CandidateResult[] = consistente.candidatos.map((c) => {
     const matematicamenteEleito = !c.eleito && eleitos.has(c.numero);
     const matematicamenteSegundoTurno = !c.eleito && segundo.has(c.numero);
     if (
@@ -224,5 +276,5 @@ export function withEleicaoMatematica(race: RaceResult): RaceResult {
     mudou = true;
     return { ...c, matematicamenteEleito, matematicamenteSegundoTurno };
   });
-  return mudou ? { ...race, candidatos } : race;
+  return mudou ? { ...consistente, candidatos } : consistente;
 }

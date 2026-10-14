@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   computeEleicaoMatematica,
+  corrigirEleitosOficiais,
   ehSegundoTurnoOficial,
   normalizeResultado,
   withEleicaoMatematica,
@@ -304,7 +305,116 @@ describe("ehSegundoTurnoOficial", () => {
   });
 });
 
+describe("corrigirEleitosOficiais", () => {
+  it("Presidente: mantém só o 1º quando 1º e 2º vêm marcados como eleitos", () => {
+    const base = corrida({
+      cargo: 1,
+      votos: [1000, 900, 50],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1950,
+      eleitos: [1, 2],
+    });
+    const r = corrigirEleitosOficiais(base);
+    expect(r.candidatos.map((c) => c.eleito)).toEqual([true, false, false]);
+  });
+
+  it("Governador (vaga única): aplica a mesma correção", () => {
+    const base = corrida({
+      cargo: 3,
+      votos: [1000, 900, 50],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1950,
+      eleitos: [1, 2, 3],
+    });
+    const r = corrigirEleitosOficiais(base);
+    expect(r.candidatos.map((c) => c.eleito)).toEqual([true, false, false]);
+  });
+
+  it("Senador (2 vagas): mantém os dois primeiros e demove o terceiro", () => {
+    const base = corrida({
+      cargo: 5,
+      votos: [1000, 900, 50],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1950,
+      eleitos: [1, 2, 3],
+    });
+    const r = corrigirEleitosOficiais(base);
+    expect(r.candidatos.map((c) => c.eleito)).toEqual([true, true, false]);
+  });
+
+  it("limpa a situação textual ao demover", () => {
+    const base = corrida({
+      cargo: 1,
+      votos: [1000, 900],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1900,
+      eleitos: [1, 2],
+    });
+    base.candidatos[1]!.situacao = "Eleito";
+    const r = corrigirEleitosOficiais(base);
+    expect(r.candidatos[1]?.situacao).toBeNull();
+  });
+
+  it("preserva a situação quando não indica eleição", () => {
+    const base = corrida({
+      cargo: 1,
+      votos: [1000, 900],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1900,
+      eleitos: [1, 2],
+    });
+    base.candidatos[1]!.situacao = "2º turno";
+    const r = corrigirEleitosOficiais(base);
+    expect(r.candidatos[1]?.situacao).toBe("2º turno");
+  });
+
+  it("não mexe em cargo proporcional (vagas dependem do quociente)", () => {
+    const base = corrida({
+      cargo: 6,
+      votos: [1000, 900, 800],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 2700,
+      eleitos: [1, 2, 3, 4],
+    });
+    const r = corrigirEleitosOficiais(base);
+    expect(r).toBe(base);
+  });
+
+  it("devolve a mesma corrida quando não há excesso de eleitos", () => {
+    const base = corrida({
+      cargo: 1,
+      votos: [1000, 900],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1900,
+      eleitos: [1],
+    });
+    expect(corrigirEleitosOficiais(base)).toBe(base);
+  });
+});
+
 describe("withEleicaoMatematica", () => {
+  it("sanea o excesso de eleitos oficiais antes de derivar a projeção", () => {
+    const base = corrida({
+      cargo: 1,
+      votos: [1000, 900, 50],
+      secoesTotal: 100,
+      secoesTotalizadas: 100,
+      validos: 1950,
+      eleitos: [1, 2],
+    });
+    const enriquecida = withEleicaoMatematica(base);
+    expect(enriquecida.candidatos.map((c) => c.eleito)).toEqual([true, false, false]);
+    // O 2º, já sem a marca oficial, não pode ser rebaixado para "matemático".
+    expect(enriquecida.candidatos[1]?.matematicamenteEleito).toBe(false);
+  });
+
   it("não sobrescreve quem já é oficialmente eleito", () => {
     const base = corrida({
       cargo: 5,
