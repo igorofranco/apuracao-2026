@@ -32,6 +32,7 @@ module.exports = {
         TSE_ELEICOES_AUTO: process.env.TSE_ELEICOES_AUTO || "true",
         TSE_VERIFY_JWS: process.env.TSE_VERIFY_JWS || "true",
         TSE_TIMEOUT_MS: process.env.TSE_TIMEOUT_MS || "15000",
+        POLL_MODE: process.env.POLL_MODE || "continuous",
         POLL_ACTIVE_MS: process.env.POLL_ACTIVE_MS || "15000",
         POLL_IDLE_MS: process.env.POLL_IDLE_MS || "60000",
         POLL_MAX_BACKOFF_MS: process.env.POLL_MAX_BACKOFF_MS || "300000",

@@ -34,6 +34,12 @@ export interface CollectorConfig {
     resolverEleicoes: boolean;
   };
   poll: {
+    /**
+     * `continuous`: coleta em regime normal (padrão).
+     * `once`: faz uma única rodada no boot — só para repovoar a memória do painel
+     * após um restart — e não agenda mais nenhuma coleta.
+     */
+    mode: "continuous" | "once";
     activeMs: number;
     idleMs: number;
     /** Teto do backoff quando o TSE está falhando repetidamente. */
@@ -79,6 +85,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollectorConfi
       resolverEleicoes: bool("TSE_ELEICOES_AUTO", true),
     },
     poll: {
+      mode: env.POLL_MODE === "once" ? "once" : "continuous",
       activeMs: int("POLL_ACTIVE_MS", 15_000),
       idleMs: int("POLL_IDLE_MS", 60_000),
       maxBackoffMs: int("POLL_MAX_BACKOFF_MS", 300_000),

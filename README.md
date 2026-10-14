@@ -83,6 +83,7 @@ Copie `.env.example` e ajuste. As principais:
 | `TSE_ELEICOES_AUTO` | Resolve eleições (e 2º turno) do config do TSE | `true` |
 | `POLL_ACTIVE_MS` / `POLL_IDLE_MS` | Cadência com apuração ativa / ociosa (ms) | `15000` / `60000` |
 | `POLL_MAX_BACKOFF_MS` | Teto de backoff quando o TSE falha | `300000` |
+| `POLL_MODE` | `continuous` (coleta contínua) ou `once` (uma rodada no boot e para) | `continuous` |
 | `CORS_ORIGIN` | Origem(ns) permitida(s), separadas por vírgula | `http://localhost:3000` |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | Rate limit global por IP | `300` / `60000` |
 | `MAX_SSE_PER_IP` | Conexões SSE simultâneas por IP | `10` |
@@ -192,6 +193,10 @@ location / {
   ela é adotada automaticamente (ou fixe via `TSE_ELEICAO_FEDERAL` / `TSE_ELEICAO_ESTADUAL`).
 - **Proteção**: rate limit global por IP e limite de conexões SSE por IP
   (`MAX_SSE_PER_IP`); CORS restrito às origens configuradas.
+- **Coleta desligada**: com `POLL_MODE=once` o collector faz uma única rodada no
+  boot (para repovoar a memória do painel após um restart, já que `hydrate()` só
+  restaura o histórico do Postgres) e não agenda mais nenhuma coleta. O painel
+  continua servindo `REST`/`SSE` normalmente.
 - **Segurança (web)**: `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy` e `Strict-Transport-Security` aplicados
   pelo Next.

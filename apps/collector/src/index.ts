@@ -70,7 +70,18 @@ async function main(): Promise<void> {
     estadual: eleicoes.estadual.cd,
   });
 
-  poller.start();
+  // Coleta: no modo `once` faz uma única rodada no boot (repovoa a memória do
+  // painel após restart) e para; caso contrário, polling contínuo normal.
+  if (config.poll.mode === "once") {
+    log.info("polling em modo once: uma rodada no boot e para");
+    void poller.runOnce().catch((err) => {
+      log.warn("rodada única de boot falhou", {
+        erro: err instanceof Error ? err.message : String(err),
+      });
+    });
+  } else {
+    poller.start();
+  }
 
   // Retenção do histórico (limpa snapshots antigos no Postgres).
   let pruneTimer: NodeJS.Timeout | undefined;
