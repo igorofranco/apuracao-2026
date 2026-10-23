@@ -73,6 +73,35 @@ export interface MunicipiosResponse {
   municipios: Municipio[];
 }
 
+/** Votação presidencial de um município (mapa do 2º turno). */
+export interface MunicipioPresidenteResumo {
+  cd: string;
+  cdi: string | null;
+  nome: string;
+  uf: string;
+  votos: Record<string, number>;
+  votosValidos: number;
+  semDados: boolean;
+  atualizadoEm: string;
+}
+
+/**
+ * Snapshot da coleta municipal do presidente. É alimentado em segundo plano
+ * pelo collector; `coletados < total` indica que o mapa ainda está enchendo.
+ */
+export interface MunicipiosPresidenteResponse {
+  eleicao: number;
+  cargo: number;
+  uf: string;
+  total: number;
+  coletados: number;
+  preparando: boolean;
+  /** true quando a coleta municipal está desligada no collector. */
+  desabilitado?: boolean;
+  atualizadoEm: string | null;
+  municipios: MunicipioPresidenteResumo[];
+}
+
 export interface ConfigResponse {
   eleicao: EleicoesResolvidas;
   ufs: Uf[];
@@ -113,6 +142,14 @@ export const api = {
     params: { eleicao: number; uf: string },
     signal?: AbortSignal,
   ) => getJson<MunicipiosResponse>(`/api/municipios${qs(params)}`, signal),
+  presidenteMunicipios: (
+    params: { eleicao: number; uf: string },
+    signal?: AbortSignal,
+  ) =>
+    getJson<MunicipiosPresidenteResponse>(
+      `/api/presidente/municipios${qs(params)}`,
+      signal,
+    ),
 };
 
 export type {

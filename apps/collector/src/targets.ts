@@ -28,6 +28,17 @@ export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
     label: "Presidente (BR)",
   });
 
+  // Presidente também é coletado por UF. O /api/resumo usa essa votação para
+  // montar o mapa por estado (quem teve mais votos em cada UF).
+  for (const uf of UF_SIGLAS) {
+    targets.push({
+      eleicao: eleicoes.federal.cd,
+      cargo: 1,
+      uf,
+      label: `Presidente (${uf.toUpperCase()})`,
+    });
+  }
+
   for (const uf of UF_SIGLAS) {
     for (const cargo of cargosDaUf(uf)) {
       if (

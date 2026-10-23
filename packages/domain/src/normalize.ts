@@ -166,6 +166,12 @@ export function normalizeResultado(raw: RawResultado): RaceResult {
   };
 }
 
+/**
+ * Limite de candidatos no resumo da corrida. O mapa por estado só precisa dos
+ * dois primeiros; 5 dá margem para cargos majoritários sem inflar o /api/resumo.
+ */
+const MAX_CANDIDATOS_RESUMO = 5;
+
 /** Resumo de uma corrida para o painel inicial. */
 export function summarizeRace(race: RaceResult): RaceSummary {
   const primeiro = race.candidatos[0];
@@ -190,6 +196,13 @@ export function summarizeRace(race: RaceResult): RaceSummary {
           percentual: lider.percentual,
         }
       : null,
+    candidatos: race.candidatos.slice(0, MAX_CANDIDATOS_RESUMO).map((c) => ({
+      numero: c.numero,
+      nomeUrna: c.nomeUrna,
+      siglaPartido: c.siglaPartido,
+      votos: c.votos,
+      percentual: c.percentual,
+    })),
   };
 }
 

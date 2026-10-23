@@ -103,3 +103,30 @@ export function useMunicipios(params: { eleicao: number; uf: string }) {
     staleTime: 30 * 60_000,
   });
 }
+
+/**
+ * Snapshot municipal do presidente para o mapa do 2º turno. O collector
+ * alimenta esse cache em segundo plano; aqui só lemos e, enquanto ele enche,
+ * atualizamos o progresso a cada 8 s (sem disparar requisições ao TSE).
+ */
+export function useMunicipiosPresidente(params: {
+  eleicao: number;
+  uf: string | null;
+}) {
+  return useQuery({
+    queryKey: ["presidente-municipios", params.eleicao, params.uf ?? ""],
+    queryFn: ({ signal }) =>
+      api.presidenteMunicipios(
+        { eleicao: params.eleicao, uf: params.uf ?? "" },
+        signal,
+      ),
+    enabled: Boolean(params.uf),
+    staleTime: 30_000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 10_000;
+      return data.preparando || data.coletados < data.total ? 8_000 : 60_000;
+    },
+    retry: 1,
+  });
+}

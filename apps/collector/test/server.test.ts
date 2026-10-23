@@ -5,6 +5,7 @@ import { loadConfig } from "../src/config.ts";
 import { LocalidadesCache } from "../src/localidades.ts";
 import { Logger } from "../src/logger.ts";
 import { MunicipiosCache } from "../src/municipios.ts";
+import type { MunicipiosPresidente } from "../src/municipios-presidente.ts";
 import { buildServer } from "../src/server.ts";
 import { RaceStore, type SnapshotRepository } from "../src/store.ts";
 import type { Poller, PollerStats } from "../src/poller.ts";
@@ -95,6 +96,19 @@ async function montarApp(rateMax = 1000) {
   const client = fakeClient();
   const log = new Logger({ level: "error" });
   const poller = { stats: { ...statsVazio } } as unknown as Poller;
+  const municipiosPresidente = {
+    snapshot: (eleicao: number, uf: string) => ({
+      eleicao,
+      cargo: 1,
+      uf,
+      total: 0,
+      coletados: 0,
+      preparando: true,
+      atualizadoEm: null,
+      municipios: [],
+    }),
+    priorizar: () => {},
+  } as unknown as MunicipiosPresidente;
   const app = await buildServer({
     config,
     store,
@@ -102,6 +116,7 @@ async function montarApp(rateMax = 1000) {
     client,
     municipios: new MunicipiosCache(client, "ele2026"),
     localidades: new LocalidadesCache(client, 60_000),
+    municipiosPresidente,
     eleicoes,
     log,
     flags: { redis: false, redisOk: false, postgres: false },
@@ -136,6 +151,29 @@ describe("collector HTTP", () => {
       url: "/api/resultado?eleicao=6257&cargo=1&uf=br",
     });
     expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
+  it("serve o cache municipal do presidente e exige a UF", async () => {
+    const { app } = await montarApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/presidente/municipios?eleicao=6257&uf=sp",
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      eleicao: 6257,
+      cargo: 1,
+      uf: "sp",
+      total: 0,
+      preparando: true,
+    });
+
+    const semUf = await app.inject({
+      method: "GET",
+      url: "/api/presidente/municipios?eleicao=6257",
+    });
+    expect(semUf.statusCode).toBe(400);
     await app.close();
   });
 

@@ -193,15 +193,27 @@ location / {
 - **2º turno**: os códigos de eleição são resolvidos do config do TSE
   (`TSE_ELEICOES_AUTO=true`); ao surgir uma eleição de maior turno para o pleito,
   ela é adotada automaticamente (ou fixe via `TSE_ELEICAO_FEDERAL` / `TSE_ELEICAO_ESTADUAL`).
+  O config pode repetir o mesmo pleito em mais de um bloco (o 2º turno costuma vir
+  em um bloco novo); o coletor agrega todos antes de escolher o maior turno.
   Presidente e Governador passam a ser coletados no turno atual; Senador e
   Deputados continuam vindo da eleição do 1º turno — assim os dados já apurados
   não desaparecem. O web resolve os códigos em `/api/config`, sem constantes fixas.
+  A Presidência **não** usa o 1º turno como fallback: enquanto o 2º turno não tem
+  votos, os dois candidatos aparecem com 0% e a apuração/evolução fica oculta.
+  Presidente também é coletado **por UF** (`<uf>-c0001-e<eleição>-u.json`) para
+  alimentar o mapa por estado do 2º turno.
 - **Proteção**: rate limit global por IP e limite de conexões SSE por IP
   (`MAX_SSE_PER_IP`); CORS restrito às origens configuradas.
 - **Coleta desligada**: com `POLL_MODE=once` o collector faz uma única rodada no
   boot (para repovoar a memória do painel após um restart, já que `hydrate()` só
   restaura o histórico do Postgres) e não agenda mais nenhuma coleta. O painel
   continua servindo `REST`/`SSE` normalmente.
+- **Coleta municipal do 2º turno**: em segundo plano, o collector percorre os
+  municípios (uma requisição por vez, `MUNICIPIOS_POLL_INTERVAL_MS`, padrão
+  250 ms) e guarda a votação de Presidente em memória. O web lê
+  `/api/presidente/municipios?uf=sp` e pinta o mapa conforme a coleta avança;
+  a UF aberta vai para a frente da fila. Com `MUNICIPIOS_POLL=false` a coleta é
+  desligada; no `POLL_MODE=once` é uma única varredura.
 - **Segurança (web)**: `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy` e `Strict-Transport-Security` aplicados
   pelo Next.
@@ -212,10 +224,14 @@ location / {
 npm run check     # typecheck + lint + test
 ```
 
-- **32 testes**: normalização dos dados do TSE (inclusive conversores numéricos),
-  verificação JWS (fixtures reais), cache assíncrono com dedupe e integração HTTP
-  do collector (rotas, cache de localidade, 404 e rate limit).
+- **Testes unitários** em todos os pacotes: normalização dos dados do TSE
+  (inclusive conversores numéricos), verificação JWS (fixtures reais), cache
+  assíncrono com dedupe, integração HTTP do collector (rotas, cache de
+  localidade, 404 e rate limit) e escalas do mapa presidencial.
 - Typecheck estrito em todos os pacotes; ESLint (flat config).
+- E2E/screenshots com Playwright: `npm run test:e2e -w @apuracao/web`. O mock
+  reproduz o cenário real (0 voto no 2º turno); para pré-visualizar o mapa
+  colorido antes da votação, rode o mock com `MOCK_RUNOFF_VOTOS=1`.
 
 ## Escopo atual
 
@@ -225,6 +241,17 @@ npm run check     # typecheck + lint + test
   (dados abertos `foto_cand2026_<UF>_div.zip`), com fallback para o número.
 - ✅ Evolução por candidato (% × tempo) no histórico, com recorte automático do
   início sem dados e das repetições do início/fim (mostra só o trecho útil).
+- ✅ Mapa do Brasil por estado no 2º turno (logo abaixo dos presidentes), com
+  heatmap entre os dois candidatos e escala **relativa** (padrão, normaliza os
+  extremos) ou **absoluta** (diferença real de votos). A paleta pode ser
+  **com neutro** (azul → neutro → vermelho) ou **sem neutro** (azul → vermelho).
+  Sem votos, o mapa fica neutro com aviso de espera.
+- ✅ Drill-down **por município no mesmo card** (clique no estado): municípios
+  sem divisas internas, contorno da UF em traço grosso, a mesma escala/paleta
+  (relativa normaliza dentro da UF) e progresso da coleta no servidor.
+  A malha fica em `apps/web/public/geo/municipios/<uf>.json` (IBGE via
+  `geodata-br`, simplificada para ~10% dos pontos). O dataset tem 5.564 dos
+  5.571 municípios atuais; os 7 criados depois ficam sem polígono.
 - ✅ Drill-down: UF → município → zona.
 - ✅ Tempo real via SSE; histórico e evolução temporal.
 - ✅ 2º turno: painel inicial com os **dois candidatos à Presidência em destaque**

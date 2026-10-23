@@ -5,6 +5,7 @@ import { createPostgresRepo } from "./persistence.ts";
 import { buildTargets } from "./targets.ts";
 import { Poller } from "./poller.ts";
 import { MunicipiosCache } from "./municipios.ts";
+import { MunicipiosPresidente } from "./municipios-presidente.ts";
 import { LocalidadesCache } from "./localidades.ts";
 import { buildServer } from "./server.ts";
 import { RedisBridge } from "./broadcast.ts";
@@ -39,6 +40,15 @@ async function main(): Promise<void> {
   const poller = new Poller({ client, store, targets, eleicoes, config, log });
   const municipios = new MunicipiosCache(client, eleicoes.ciclo);
   const localidades = new LocalidadesCache(client, 15_000);
+  const municipiosPresidente = new MunicipiosPresidente({
+    client,
+    municipios,
+    eleicoes,
+    log,
+    intervalMs: config.municipios.intervalMs,
+    refreshMs: config.municipios.refreshMs,
+    once: config.poll.mode === "once",
+  });
   const bridge = config.redisUrl
     ? await RedisBridge.create(config.redisUrl, store, log)
     : undefined;
@@ -54,6 +64,7 @@ async function main(): Promise<void> {
     client,
     municipios,
     localidades,
+    municipiosPresidente,
     eleicoes,
     log,
     flags: { redis: Boolean(bridge), redisOk, postgres: Boolean(repo) },
@@ -83,6 +94,19 @@ async function main(): Promise<void> {
     poller.start();
   }
 
+  // Coleta municipal do 2º turno: gradual, em segundo plano, para o mapa por
+  // município. No modo `once` faz uma única varredura e para.
+  if (config.municipios.enabled && eleicoes.federal.turno > 1) {
+    log.info("coleta municipal do 2º turno habilitada", {
+      intervaloMs: config.municipios.intervalMs,
+      refreshMs: config.municipios.refreshMs,
+      modo: config.poll.mode,
+    });
+    municipiosPresidente.iniciar();
+  } else if (!config.municipios.enabled) {
+    log.info("coleta municipal do 2º turno desabilitada (MUNICIPIOS_POLL=false)");
+  }
+
   // Retenção do histórico (limpa snapshots antigos no Postgres).
   let pruneTimer: NodeJS.Timeout | undefined;
   if (repo) {
@@ -107,6 +131,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     log.info("encerrando", { sinal: signal });
     poller.stop();
+    municipiosPresidente.parar();
     if (pruneTimer) clearInterval(pruneTimer);
     await server.close();
     await bridge?.close();

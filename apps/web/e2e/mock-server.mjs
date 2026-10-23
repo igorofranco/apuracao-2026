@@ -8,6 +8,7 @@
  * Sem dependências externas: roda com `node e2e/mock-server.mjs`.
  */
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 
 const PORT = Number(process.env.MOCK_PORT ?? 8787);
 const HOST = process.env.MOCK_HOST ?? "127.0.0.1";
@@ -114,17 +115,6 @@ const NOMES = [
  */
 const RUNOFF_PRESIDENTE = [
   {
-    numero: "13",
-    nome: "Luiz Inácio Lula da Silva",
-    urna: "LULA",
-    partido: "PARTIDO DOS TRABALHADORES",
-    sigla: "PT",
-    coligacao: "BRASIL PRONTO PRA MAIS",
-    vice: "GERALDO ALCKMIN",
-    sqcand: "280002542548",
-    votos: 58_940_312,
-  },
-  {
     numero: "22",
     nome: "Flavio Nantes Bolsonaro",
     urna: "FLAVIO BOLSONARO",
@@ -133,13 +123,122 @@ const RUNOFF_PRESIDENTE = [
     coligacao: null,
     vice: "ALFREDO GASPAR",
     sqcand: "280002551544",
-    votos: 47_815_204,
+    votos: 0,
+  },
+  {
+    numero: "13",
+    nome: "Luiz Inácio Lula da Silva",
+    urna: "LULA",
+    partido: "PARTIDO DOS TRABALHADORES",
+    sigla: "PT",
+    coligacao: "BRASIL PRONTO PRA MAIS",
+    vice: "GERALDO ALCKMIN",
+    sqcand: "280002542548",
+    votos: 0,
   },
 ];
 
 /** Eleições em que só Presidente/Governador disputam (2 candidatos). */
 function ehRunoff(eleicao, cargo) {
   return (eleicao === 6258 && cargo === 1) || (eleicao === 6260 && cargo === 3);
+}
+
+/**
+ * Pré-visualização do mapa por estado antes da votação oficial: com
+ * `MOCK_RUNOFF_VOTOS=1` o mock devolve uma apuração simulada por UF (aproximada
+ * do 2º turno de 2022). Desligado por padrão, para os testes refletirem o
+ * cenário real de 2026 — arquivo 6258 publicado com 0 voto.
+ */
+const SIMULAR_VOTOS = process.env.MOCK_RUNOFF_VOTOS === "1";
+
+/** [% de Lula no 2º turno de 2022, eleitorado aproximado em milhões]. */
+const CENARIO_PRESIDENTE = {
+  ac: [32, 0.57],
+  al: [67, 2.3],
+  ap: [51, 0.55],
+  am: [61, 2.6],
+  ba: [72, 11.0],
+  ce: [72, 6.9],
+  df: [41, 2.2],
+  es: [51, 2.9],
+  go: [42, 4.9],
+  ma: [71, 5.0],
+  mt: [36, 2.6],
+  ms: [39, 2.0],
+  mg: [51, 16.0],
+  pa: [54, 6.0],
+  pb: [68, 3.0],
+  pr: [36, 8.0],
+  pe: [66, 7.0],
+  pi: [71, 2.5],
+  rj: [45, 12.8],
+  rn: [66, 2.5],
+  rs: [39, 8.5],
+  ro: [36, 1.2],
+  rr: [42, 0.4],
+  sc: [30, 5.3],
+  sp: [45, 34.0],
+  se: [66, 1.7],
+  to: [51, 1.1],
+};
+
+/** Cache das malhas municipais usadas pelo drill-down do mapa. */
+const GEO_MUNICIPIOS = new Map();
+
+function municipiosGeo(uf) {
+  if (GEO_MUNICIPIOS.has(uf)) return GEO_MUNICIPIOS.get(uf);
+  let json = null;
+  try {
+    json = JSON.parse(
+      readFileSync(
+        new URL(`../public/geo/municipios/${uf}.json`, import.meta.url),
+        "utf8",
+      ),
+    );
+  } catch {
+    json = null;
+  }
+  GEO_MUNICIPIOS.set(uf, json);
+  return json;
+}
+
+/**
+ * Votação simulada de um município: parte do percentual estadual e aplica uma
+ * variação determinística por município, para o mapa ganhar textura.
+ */
+function votosMunicipioPresidente(uf, cdi) {
+  if (!SIMULAR_VOTOS) {
+    return { votos: { "13": 0, "22": 0 }, votosValidos: 0 };
+  }
+  const base = CENARIO_PRESIDENTE[uf]?.[0] ?? 50;
+  const variacao = ((hash(`mun:${cdi}`) % 1601) / 100) - 8; // -8 a +8 pontos
+  const share = Math.max(5, Math.min(95, base + variacao));
+  const validos = 500 + (hash(`eleitores:${cdi}`) % 50_000);
+  const lula = Math.round((validos * share) / 100);
+  return {
+    votos: { "13": lula, "22": validos - lula },
+    votosValidos: validos,
+  };
+}
+
+/** Votos simulados por candidato (13 = Lula, 22 = Flávio) em uma UF. */
+function votosSimuladosPresidente(uf) {
+  if (uf === "br") {
+    const total = { "13": 0, "22": 0 };
+    for (const u of UFS) {
+      const votos = votosSimuladosPresidente(u.uf);
+      total["13"] += votos["13"];
+      total["22"] += votos["22"];
+    }
+    return total;
+  }
+  const cenario = CENARIO_PRESIDENTE[uf];
+  if (!cenario) return { "13": 0, "22": 0 };
+  const [shareLula, eleitorado] = cenario;
+  // Aproximação de votos válidos (comparecimento menos brancos/nulos).
+  const validos = Math.round(eleitorado * 1_000_000 * 0.8);
+  const lula = Math.round((validos * shareLula) / 100);
+  return { "13": lula, "22": validos - lula };
 }
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -161,43 +260,56 @@ const MAJORITARIOS = new Set([1, 3, 5]);
  */
 function makeRunoffCandidatos(cargo, chave) {
   const finalizar = ({ candidatos, soma }) => {
-    for (const c of candidatos) c.percentual = round2((c.votos / soma) * 100);
-    return { candidatos, soma, totalVotos: soma };
+    for (const c of candidatos) {
+      c.percentual = soma > 0 ? round2((c.votos / soma) * 100) : 0;
+    }
+    // Sem votos ainda, mantemos um eleitorado plausível para a tela de espera.
+    const eleitoradoBase = cargo === 1 ? 123_000_000 : 11_252_936;
+    return { candidatos, soma, totalVotos: soma > 0 ? soma : eleitoradoBase };
   };
 
   if (cargo === 1) {
-    const soma = RUNOFF_PRESIDENTE.reduce((a, c) => a + c.votos, 0);
-    return finalizar({
-      soma,
-      candidatos: RUNOFF_PRESIDENTE.map((c, i) => ({
-        numero: c.numero,
-        sqcand: c.sqcand,
-        nome: c.nome,
-        nomeUrna: c.urna,
-        partido: c.partido,
-        siglaPartido: c.sigla,
-        federacao: null,
-        coligacao: c.coligacao,
-        composicao: null,
-        votos: c.votos,
-        percentual: 0,
-        posicao: i + 1,
-        eleito: false,
-        matematicamenteEleito: false,
-        matematicamenteSegundoTurno: false,
-        segundoTurnoOficial: true,
-        situacao: "2º turno",
-        vice: c.vice,
-        suplentes: [],
-      })),
-    });
+    const simulados = SIMULAR_VOTOS ? votosSimuladosPresidente(chave) : null;
+    const candidatos = RUNOFF_PRESIDENTE.map((c, i) => ({
+      numero: c.numero,
+      sqcand: c.sqcand,
+      nome: c.nome,
+      nomeUrna: c.urna,
+      partido: c.partido,
+      siglaPartido: c.sigla,
+      federacao: null,
+      coligacao: c.coligacao,
+      composicao: null,
+      votos: simulados ? (simulados[c.numero] ?? 0) : 0,
+      percentual: 0,
+      posicao: i + 1,
+      eleito: false,
+      matematicamenteEleito: false,
+      matematicamenteSegundoTurno: false,
+      segundoTurnoOficial: true,
+      situacao: "2º turno",
+      vice: c.vice,
+      suplentes: [],
+    }));
+    // Com votos simulados, replica a ordenação do domínio (mais votado primeiro;
+    // empate cai no nome de urna). Sem votos, mantém a ordem do arquivo.
+    if (simulados) {
+      candidatos.sort(
+        (a, b) =>
+          b.votos - a.votos || a.nomeUrna.localeCompare(b.nomeUrna, "pt-BR"),
+      );
+      candidatos.forEach((c, i) => {
+        c.posicao = i + 1;
+      });
+    }
+    const soma = candidatos.reduce((a, c) => a + c.votos, 0);
+    return finalizar({ candidatos, soma });
   }
 
   const off = hash(chave) % NOMES.length;
-  const votosLider = 5_400_000 + (hash(`${chave}:1`) % 900_000);
   const definicoes = [
-    { votos: votosLider, i: 0 },
-    { votos: Math.round(votosLider / 0.548) - votosLider, i: 3 },
+    { votos: 0, i: 0 },
+    { votos: 0, i: 3 },
   ];
   const candidatos = definicoes.map((d, i) => {
     const partido = PARTIDOS[(off + d.i) % PARTIDOS.length];
@@ -297,13 +409,18 @@ function makeRace({ eleicao, cargo, uf, municipio, zona }) {
   // aparecer (líder inalcançável). Demais: percentual variado. No 2º turno a
   // apuração está em curso (cenário simulado).
   const major = MAJORITARIOS.has(cargo);
-  const pct = runoff
-    ? round2(88 + (hash(`${chave}:${cargo}:runoff`) % 80) / 10)
-    : major
-      ? 99.2
-      : round2(55 + (hash(`${chave}:${cargo}`) % 450) / 10);
+  // 2º turno sem votos (o arquivo do TSE já tem os candidatos, mas 0 apurado).
+  const semVotos = soma === 0;
+  const pct = semVotos
+    ? 0
+    : runoff
+      ? round2(88 + (hash(`${chave}:${cargo}:runoff`) % 80) / 10)
+      : major
+        ? 99.2
+        : round2(55 + (hash(`${chave}:${cargo}`) % 450) / 10);
 
-  const secoesTotal = 60_000 + (hash(chave) % 90_000);
+  const secoesTotal =
+    runoff && cargo === 1 ? 499_248 : 60_000 + (hash(chave) % 90_000);
   const secoesTotalizadas = Math.round((secoesTotal * pct) / 100);
   const eleitoradoTotal = Math.round(totalVotos / 0.78);
   const brancos = Math.round(soma * 0.03);
@@ -314,17 +431,17 @@ function makeRace({ eleicao, cargo, uf, municipio, zona }) {
     cargo,
     uf,
     abrangencia,
-    geracao: runoff ? "20261025194200" : "20261004184200",
-    atualizadoEm: runoff ? "2026-10-25T19:42:11-03:00" : "2026-10-04T18:42:11-03:00",
-    andamento: "s",
+    geracao: runoff ? "20261015093812" : "20261004184200",
+    atualizadoEm: runoff ? "2026-10-15T09:38:12-03:00" : "2026-10-04T18:42:11-03:00",
+    andamento: semVotos ? "n" : "s",
     totalizacaoFinal: false,
     divulgarVotacao: true,
     secoes: {
       total: secoesTotal,
       totalizadas: secoesTotalizadas,
       naoTotalizadas: secoesTotal - secoesTotalizadas,
-      instaladas: secoesTotal,
-      naoInstaladas: 0,
+      instaladas: semVotos ? 0 : secoesTotal,
+      naoInstaladas: semVotos ? secoesTotal : 0,
       apuradas: secoesTotalizadas,
       naoApuradas: secoesTotal - secoesTotalizadas,
       percentualTotalizadas: pct,
@@ -332,13 +449,17 @@ function makeRace({ eleicao, cargo, uf, municipio, zona }) {
     },
     eleitorado: {
       total: eleitoradoTotal,
-      apurado: totalVotos,
-      naoApurado: eleitoradoTotal - totalVotos,
-      percentualApurado: round2((totalVotos / eleitoradoTotal) * 100),
-      comparecimento: totalVotos,
-      percentualComparecimento: round2((totalVotos / eleitoradoTotal) * 100),
-      abstencoes: eleitoradoTotal - totalVotos,
-      percentualAbstencoes: round2(((eleitoradoTotal - totalVotos) / eleitoradoTotal) * 100),
+      apurado: semVotos ? 0 : totalVotos,
+      naoApurado: semVotos ? eleitoradoTotal : eleitoradoTotal - totalVotos,
+      percentualApurado: semVotos ? 0 : round2((totalVotos / eleitoradoTotal) * 100),
+      comparecimento: semVotos ? 0 : totalVotos,
+      percentualComparecimento: semVotos
+        ? 0
+        : round2((totalVotos / eleitoradoTotal) * 100),
+      abstencoes: semVotos ? 0 : eleitoradoTotal - totalVotos,
+      percentualAbstencoes: semVotos
+        ? 0
+        : round2(((eleitoradoTotal - totalVotos) / eleitoradoTotal) * 100),
     },
     votos: {
       validos: soma,
@@ -366,15 +487,24 @@ function makeSummary(eleicao, cargo, uf) {
     percentualApurado: race.secoes.percentualTotalizadas,
     votosValidos: race.votos.validos,
     comparecimento: race.eleitorado.comparecimento,
-    lider: lider
-      ? {
-          numero: lider.numero,
-          nomeUrna: lider.nomeUrna,
-          partido: lider.siglaPartido,
-          votos: lider.votos,
-          percentual: lider.percentual,
-        }
-      : null,
+    lider:
+      lider && lider.votos > 0
+        ? {
+            numero: lider.numero,
+            nomeUrna: lider.nomeUrna,
+            partido: lider.siglaPartido,
+            votos: lider.votos,
+            percentual: lider.percentual,
+          }
+        : null,
+    // Votação dos principais candidatos (mapa presidencial por estado).
+    candidatos: race.candidatos.slice(0, 5).map((c) => ({
+      numero: c.numero,
+      nomeUrna: c.nomeUrna,
+      siglaPartido: c.siglaPartido,
+      votos: c.votos,
+      percentual: c.percentual,
+    })),
   };
 }
 
@@ -429,9 +559,14 @@ function makeHistorico(eleicao, cargo, uf) {
   const horaBase = runoff ? 19 : 18;
   const dataBase = runoff ? "2026-10-25" : "2026-10-04";
   const dataCompacta = dataBase.replace(/-/g, "");
-  const totalPassos = 10;
-  const ultimoComDados = 7; // 7 pontos evoluindo + 2 repetições finais
+  // Sem votos, o histórico tem só a geração inicial (como no coletor real).
+  // Com votos, 7 pontos evoluindo + 2 repetições finais para exercitar o recorte.
+  const totalPassos = votosFinal > 0 ? 10 : 1;
+  const ultimoComDados = 7;
   const candidatosFinal = race.candidatos.slice(0, 8);
+  // 2º turno ainda sem votos: a série inteira fica zerada e o gráfico mostra o
+  // estado vazio, sem reaproveitar percentuais de simulação.
+  const semVotos = votosFinal === 0;
 
   const snapshot = (i) => {
     const minutos = i * 4;
@@ -445,14 +580,15 @@ function makeHistorico(eleicao, cargo, uf) {
     const candidatos = candidatosFinal.map((c, j) => {
       // Diferença inicial: o líder começa acima e os demais dividem a sobra.
       const delta = j === 0 ? 4 : -4 / Math.max(1, candidatosFinal.length - 1);
-      const percentual = semDados
-        ? 0
-        : round2(Math.max(0, c.percentual + (1 - fator) * delta));
+      const percentual =
+        semDados || semVotos
+          ? 0
+          : round2(Math.max(0, c.percentual + (1 - fator) * delta));
       return {
         numero: c.numero,
         nomeUrna: c.nomeUrna,
         siglaPartido: c.siglaPartido,
-        votos: semDados ? 0 : Math.round((validos * percentual) / 100),
+        votos: semDados || semVotos ? 0 : Math.round((validos * percentual) / 100),
         percentual,
       };
     });
@@ -489,6 +625,8 @@ function makeHistorico(eleicao, cargo, uf) {
 function buildResumo() {
   const corridas = [makeSummary(6258, 1, "br")];
   for (const u of UFS) {
+    // Presidente também por UF (mapa do 2º turno).
+    corridas.push(makeSummary(6258, 1, u.uf));
     // Governador: 2º turno + 1º turno (fallback de estados sem disputa).
     // Senador segue com os dados do 1º turno.
     corridas.push(makeSummary(6260, 3, u.uf));
@@ -552,6 +690,37 @@ const server = createServer((req, res) => {
     const uf = (q.get("uf") ?? "sp").toLowerCase();
     const municipios = municipiosDe(uf);
     return json(res, 200, { eleicao, uf, total: municipios.length, municipios });
+  }
+
+  if (path === "/api/presidente/municipios") {
+    const eleicao = Number(q.get("eleicao") ?? 6258);
+    const uf = (q.get("uf") ?? "").toLowerCase();
+    const geo = uf ? municipiosGeo(uf) : null;
+    if (!geo) {
+      return json(res, 404, { error: "malha municipal indisponível", uf });
+    }
+    const atualizadoEm = SIMULAR_VOTOS
+      ? "2026-10-25T19:42:00-03:00"
+      : "2026-10-15T09:38:00-03:00";
+    const municipios = geo.features.map((f) => ({
+      cd: String(f.properties.id),
+      cdi: String(f.properties.id),
+      nome: String(f.properties.name ?? "").toUpperCase(),
+      uf,
+      ...votosMunicipioPresidente(uf, f.properties.id),
+      semDados: false,
+      atualizadoEm,
+    }));
+    return json(res, 200, {
+      eleicao,
+      cargo: 1,
+      uf,
+      total: municipios.length,
+      coletados: municipios.length,
+      preparando: false,
+      atualizadoEm,
+      municipios,
+    });
   }
 
   if (path === "/api/live") {

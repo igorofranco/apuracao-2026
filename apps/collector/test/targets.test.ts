@@ -23,8 +23,11 @@ describe("buildTargets", () => {
   it("no 1º turno usa a eleição atual em todos os cargos", () => {
     const targets = buildTargets(primeiroTurno);
     const presidentes = targets.filter((t) => t.cargo === 1);
-    expect(presidentes).toHaveLength(1);
-    expect(presidentes[0]?.eleicao).toBe(6257);
+    // Nacional + uma corrida por UF (para o mapa por estado).
+    expect(presidentes).toHaveLength(1 + 27);
+    expect(presidentes.every((t) => t.eleicao === 6257)).toBe(true);
+    expect(presidentes.some((t) => t.uf === "br")).toBe(true);
+    expect(presidentes.some((t) => t.uf === "sp")).toBe(true);
     for (const t of targets.filter((t) => t.cargo !== 1)) {
       expect(t.eleicao).toBe(6259);
     }
@@ -43,6 +46,7 @@ describe("buildTargets", () => {
     // Presidente volta às urnas; Governador tem o 2º turno e o 1º como fallback
     // (estados sem disputa continuam com o resultado anterior).
     expect(achar(1, "br")?.eleicao).toBe(6258);
+    expect(achar(1, "sp")?.eleicao).toBe(6258);
     expect(eleicoesGovernador("sp")).toEqual([6259, 6260]);
     expect(eleicoesGovernador("df")).toEqual([6259, 6260]);
 

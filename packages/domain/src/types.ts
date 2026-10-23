@@ -131,6 +131,15 @@ export interface Snapshot {
   candidatos?: SnapshotCandidato[];
 }
 
+/** Votação resumida de um candidato (usada em mapas e visões por estado). */
+export interface ResumoCandidato {
+  numero: string;
+  nomeUrna: string;
+  siglaPartido: string;
+  votos: number;
+  percentual: number;
+}
+
 /** Resumo de uma eleição/cargo para o painel inicial. */
 export interface RaceSummary {
   eleicao: number;
@@ -148,6 +157,12 @@ export interface RaceSummary {
     votos: number;
     percentual: number;
   } | null;
+  /**
+   * Votação dos principais candidatos da corrida. Permite montar mapas por
+   * estado sem precisar buscar o resultado completo de cada UF. Opcional para
+   * compatibilidade com resumos gerados antes deste campo existir.
+   */
+  candidatos?: ResumoCandidato[];
 }
 
 export interface Municipio {

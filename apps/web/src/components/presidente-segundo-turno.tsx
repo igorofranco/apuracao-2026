@@ -24,7 +24,6 @@ export function PresidenteSegundoTurno({
   race,
   turno,
   data,
-  carregando = false,
   mostrarLink = true,
   className,
 }: {
@@ -33,7 +32,6 @@ export function PresidenteSegundoTurno({
   turno: number;
   /** Data da eleição (ISO). */
   data?: string | null;
-  carregando?: boolean;
   mostrarLink?: boolean;
   className?: string;
 }) {
@@ -41,7 +39,6 @@ export function PresidenteSegundoTurno({
   const dois = disputa?.candidatos ?? [];
   const totalizadas = race?.secoes.percentualTotalizadas ?? 0;
   const segundoTurno = turno > 1;
-  const lider = dois[0] ?? null;
   // Antes da votação os dois candidatos existem, mas ninguém está "na frente".
   const temVotos = dois.some((c) => c.votos > 0);
 
@@ -78,7 +75,7 @@ export function PresidenteSegundoTurno({
             <span className="hidden sm:inline">Brasil · </span>
             {disputa
               ? ORIGEM_TEXTO[disputa.origem]
-              : "aguardando a definição dos dois candidatos"}
+              : "aguardando os dados do 2º turno"}
             {race?.atualizadoEm ? (
               <span className="hidden sm:inline">
                 {" "}
@@ -95,7 +92,7 @@ export function PresidenteSegundoTurno({
           <div className="mt-1 text-xs text-muted-foreground">
             das seções totalizadas
           </div>
-          {race ? (
+          {race && race.votos.validos > 0 ? (
             <div className="mt-1 hidden text-xs text-muted-foreground sm:block">
               {formatCompact(race.votos.validos)} votos válidos
             </div>
@@ -110,12 +107,7 @@ export function PresidenteSegundoTurno({
       />
 
       <div className="mt-4 grid flex-1 items-stretch gap-3 sm:mt-8 sm:gap-5 md:grid-cols-2">
-        {carregando ? (
-          <>
-            <Skeleton className="min-h-[13rem] w-full rounded-2xl" />
-            <Skeleton className="min-h-[13rem] w-full rounded-2xl" />
-          </>
-        ) : dois.length === 2 ? (
+        {dois.length === 2 ? (
           dois.map((candidato, i) => (
             <CandidatoDestaque
               key={candidato.numero + candidato.nome}
@@ -124,16 +116,10 @@ export function PresidenteSegundoTurno({
             />
           ))
         ) : (
-          <div className="self-center rounded-2xl border border-dashed border-border p-6 text-center sm:col-span-2">
-            <p className="text-base font-medium">
-              Aguardando o início da apuração do 2º turno
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {lider
-                ? "O segundo candidato do 2º turno ainda não está definido."
-                : "Os dois candidatos aparecem aqui assim que o TSE publicar os dados."}
-            </p>
-          </div>
+          <>
+            <PlaceholderCandidato />
+            <PlaceholderCandidato />
+          </>
         )}
       </div>
 
@@ -167,8 +153,6 @@ function CandidatoDestaque({
   lider: boolean;
 }) {
   const pct = Math.max(0, Math.min(100, candidato.percentual));
-  // Antes da votação não há percentual: melhor "—" do que "0,0%".
-  const semVotos = candidato.votos <= 0;
   return (
     <article
       data-testid="candidato-destaque"
@@ -212,7 +196,7 @@ function CandidatoDestaque({
       <div className="mt-4 flex items-end justify-between gap-3 sm:mt-5">
         <div>
           <div className="tabular text-4xl font-bold leading-none sm:text-5xl">
-            {semVotos ? "—" : formatPercent(pct, 1)}
+            {formatPercent(pct, 1)}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
             dos votos válidos
@@ -220,7 +204,7 @@ function CandidatoDestaque({
         </div>
         <div className="text-right">
           <div className="tabular text-lg font-semibold sm:text-xl">
-            {semVotos ? "—" : formatInt(candidato.votos)}
+            {formatInt(candidato.votos)}
           </div>
           <div className="text-xs text-muted-foreground">votos</div>
         </div>
@@ -232,7 +216,7 @@ function CandidatoDestaque({
             "h-full rounded-full transition-all",
             lider ? "bg-primary" : "bg-primary/45",
           )}
-          style={{ width: `${semVotos ? 0 : Math.max(pct, 1)}%` }}
+          style={{ width: `${pct > 0 ? Math.max(pct, 1) : 0}%` }}
         />
       </div>
 
@@ -242,5 +226,33 @@ function CandidatoDestaque({
         </p>
       ) : null}
     </article>
+  );
+}
+
+/**
+ * Enquanto o TSE não publica os candidatos/votação do 2º turno, o espaço de
+ * cada candidato fica reservado com um placeholder — sem reaproveitar dados do
+ * 1º turno.
+ */
+function PlaceholderCandidato() {
+  return (
+    <div
+      data-testid="candidato-placeholder"
+      aria-hidden
+      className="flex min-h-[13rem] flex-col justify-center gap-4 rounded-2xl border border-dashed border-border p-4 sm:p-6"
+    >
+      <div className="flex items-center gap-3 sm:gap-4">
+        <Skeleton className="h-24 w-[4.25rem] shrink-0 rounded-xl sm:h-32 sm:w-24" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-6 w-3/4" />
+          <Skeleton className="h-4 w-1/2" />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-32" />
+        <Skeleton className="h-3 w-full" />
+      </div>
+    </div>
   );
 }

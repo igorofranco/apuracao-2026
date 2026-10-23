@@ -46,6 +46,19 @@ describe("normalizeResultado", () => {
     expect(resumo.lider).toBeNull();
   });
 
+  it("guarda a votação dos principais candidatos no resumo", () => {
+    const resumo = summarizeRace(race);
+    // Limitado para não inflar o /api/resumo (proporcionais têm centenas).
+    expect(resumo.candidatos).toHaveLength(5);
+    expect(resumo.candidatos?.[0]).toEqual({
+      numero: race.candidatos[0]?.numero,
+      nomeUrna: race.candidatos[0]?.nomeUrna,
+      siglaPartido: race.candidatos[0]?.siglaPartido,
+      votos: 0,
+      percentual: 0,
+    });
+  });
+
   it("guarda a votação por candidato no snapshot", () => {
     const snap = snapshotFrom(race, "2026-10-25T19:00:00-03:00");
     expect(snap.candidatos).toHaveLength(12);

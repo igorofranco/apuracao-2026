@@ -1,6 +1,6 @@
 import { ELEICAO_2026 } from "@apuracao/shared";
 import { parseDataHora, type RawConfig, type RawConfigEleicao } from "@apuracao/domain";
-import { findPleito, listEleicoes, type TseClient } from "@apuracao/tse-client";
+import type { TseClient } from "@apuracao/tse-client";
 import type { CollectorConfig } from "./config.ts";
 import type { Logger } from "./logger.ts";
 
@@ -92,8 +92,12 @@ export async function resolverEleicoes(
 
   try {
     const raw: RawConfig = await client.getConfig(config.tse.ciclo);
-    const pleito = findPleito(raw, config.tse.ciclo);
-    const eleicoes = listEleicoes(pleito);
+    // O config do TSE pode repetir o mesmo pleito em blocos separados (o 2º
+    // turno costuma vir em um bloco novo, com o mesmo `c`). Agregamos todos
+    // para que `escolherPorTipo(..., "maior")` realmente veja o 2º turno.
+    const eleicoes = raw.pl
+      .filter((p) => p.c === config.tse.ciclo)
+      .flatMap((p) => p.e ?? []);
     if (eleicoes.length === 0) return fallback;
 
     const federalCfg = config.tse.eleicaoFederal

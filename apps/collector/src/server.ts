@@ -8,6 +8,7 @@ import type { EleicoesResolvidas } from "./eleicoes.ts";
 import type { LocalidadesCache } from "./localidades.ts";
 import type { Logger } from "./logger.ts";
 import type { MunicipiosCache } from "./municipios.ts";
+import type { MunicipiosPresidente } from "./municipios-presidente.ts";
 import type { Poller } from "./poller.ts";
 import type { RaceStore } from "./store.ts";
 
@@ -18,6 +19,7 @@ export interface ServerDeps {
   client: TseClient;
   municipios: MunicipiosCache;
   localidades: LocalidadesCache;
+  municipiosPresidente: MunicipiosPresidente;
   eleicoes: EleicoesResolvidas;
   log: Logger;
   flags: { redis: boolean; redisOk: boolean; postgres: boolean };
@@ -165,6 +167,31 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const uf = (q.uf ?? "sp").toLowerCase();
     const municipios = await deps.municipios.municipiosOf(eleicao, uf);
     return { eleicao, uf, total: municipios.length, municipios };
+  });
+
+  /**
+   * Presidente por município (mapa do 2º turno). Lê o cache alimentado em
+   * segundo plano pelo `MunicipiosPresidente`; a requisição nunca dispara uma
+   * rajada de chamadas ao TSE. `coletados < total` sinaliza coleta em curso.
+   */
+  app.get("/api/presidente/municipios", async (req, reply) => {
+    const q = query(req);
+    const eleicao = toInt(q.eleicao, deps.eleicoes.federal.cd);
+    const uf = (q.uf ?? "").toLowerCase();
+    if (!uf) {
+      return reply.code(400).send({ error: "uf obrigatória" });
+    }
+    const snapshot = deps.municipiosPresidente.snapshot(eleicao, uf);
+    if (!snapshot) {
+      return reply.code(404).send({ error: "eleição não é a presidencial atual" });
+    }
+    deps.municipiosPresidente.priorizar(uf);
+    return {
+      ...snapshot,
+      desabilitado:
+        !deps.config.municipios.enabled ||
+        deps.eleicoes.federal.turno <= 1,
+    };
   });
 
   // SSE: empurra atualizações conforme novas gerações chegam.

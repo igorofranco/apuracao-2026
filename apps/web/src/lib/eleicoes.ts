@@ -8,11 +8,13 @@ import type { EleicaoResolvida, EleicoesResolvidas } from "@/lib/api";
  */
 export const ELEICOES_FALLBACK: EleicoesResolvidas = {
   ciclo: ELEICAO_2026.ciclo,
+  // A Presidência já está no 2º turno. Não usamos o 1º turno como fallback para
+  // não exibir candidatos/votação antigos enquanto o /api/config carrega.
   federal: {
-    cd: ELEICAO_2026.eleicoes.federal,
-    turno: 1,
-    data: `${ELEICAO_2026.data}T17:00:00-03:00`,
-    nome: "Federal",
+    cd: ELEICAO_2026.eleicoes.federalSegundoTurno,
+    turno: 2,
+    data: `${ELEICAO_2026.dataSegundoTurno}T17:00:00-03:00`,
+    nome: "Federal (2º turno)",
   },
   estadual: {
     cd: ELEICAO_2026.eleicoes.estadual,
@@ -22,6 +24,17 @@ export const ELEICOES_FALLBACK: EleicoesResolvidas = {
   },
   doConfig: false,
 };
+
+/**
+ * Data da eleição presidencial atual. O config do TSE às vezes não traz `dt`
+ * para o 2º turno; nesse caso usamos a data conhecida do calendário.
+ */
+export function dataPresidencial(eleicoes: EleicoesResolvidas): string | null {
+  if (eleicoes.federal.data) return eleicoes.federal.data;
+  return eleicoes.federal.turno > 1
+    ? `${ELEICAO_2026.dataSegundoTurno}T17:00:00-03:00`
+    : null;
+}
 
 /**
  * Código da eleição estadual de um cargo. Governador acompanha o turno atual

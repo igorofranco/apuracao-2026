@@ -9,11 +9,17 @@ export const ELEICAO_2026 = {
   pleito: 3220,
   /** Data do 1º turno. */
   data: "2026-10-04",
+  /** Data do 2º turno (Presidente e Governador). */
+  dataSegundoTurno: "2026-10-25",
   eleicoes: {
-    /** Eleição Federal (Presidente). */
+    /** Eleição Federal (Presidente) do 1º turno. */
     federal: 6257,
-    /** Eleição Estadual (Governador, Senador, Dep. Federal, Dep. Estadual, Dep. Distrital). */
+    /** Eleição Federal (Presidente) do 2º turno. */
+    federalSegundoTurno: 6258,
+    /** Eleição Estadual (Governador, Senador, Dep. Federal, Dep. Estadual, Dep. Distrital) do 1º turno. */
     estadual: 6259,
+    /** Eleição Estadual (Governador) do 2º turno. */
+    estadualSegundoTurno: 6260,
     /** Eleição Municipal (Conselheiro Distrital de Fernando de Noronha). */
     municipal: 6261,
   },

@@ -49,6 +49,17 @@ export interface CollectorConfig {
     retries: number;
     runOnStart: boolean;
   };
+  /**
+   * Coleta municipal do 2º turno (mapa por município). Roda em segundo plano,
+   * com uma requisição por vez e intervalo entre elas.
+   */
+  municipios: {
+    enabled: boolean;
+    /** Intervalo entre duas requisições ao TSE (ms). */
+    intervalMs: number;
+    /** Espera entre o fim de uma varredura e o início da próxima (ms). */
+    refreshMs: number;
+  };
   redisUrl?: string;
   databaseUrl?: string;
   snapshotLimit: number;
@@ -92,6 +103,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollectorConfi
       concurrency: int("POLL_CONCURRENCY", 8),
       retries: int("POLL_RETRIES", 2),
       runOnStart: bool("POLL_RUN_ON_START", true),
+    },
+    municipios: {
+      enabled: bool("MUNICIPIOS_POLL", true),
+      intervalMs: Math.max(0, int("MUNICIPIOS_POLL_INTERVAL_MS", 250)),
+      refreshMs: Math.max(0, int("MUNICIPIOS_REFRESH_MS", 60_000)),
     },
     redisUrl: env.REDIS_URL,
     databaseUrl: env.DATABASE_URL,

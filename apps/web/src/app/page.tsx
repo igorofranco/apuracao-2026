@@ -3,11 +3,31 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { UFS } from "@apuracao/shared";
+import type { CandidateResult } from "@apuracao/domain";
 import { useEleicoes, useResumo, useResultado } from "@/lib/queries";
+import { dataPresidencial } from "@/lib/eleicoes";
 import { PresidenteSegundoTurno } from "@/components/presidente-segundo-turno";
+import { MapaPresidente } from "@/components/mapa-presidente";
 import { BrazilMap, type MapaDado } from "@/components/brazil-map";
 import { Card, Progress, Segmented, Skeleton } from "@/components/ui";
 import { formatPercent } from "@/lib/format";
+import { corPartido, getPartido, type Espectro } from "@/lib/partidos";
+import { disputaPresidencial } from "@/lib/segundo-turno";
+
+/** Ordem usada para escolher as pontas do gradiente (esquerda → direita). */
+const ORDEM_ESPECTRO: Espectro[] = [
+  "esquerda",
+  "centro-esquerda",
+  "centro",
+  "centro-direita",
+  "direita",
+];
+
+function pesoEspectro(candidato: CandidateResult): number {
+  const espectro = getPartido(candidato.siglaPartido)?.espectro;
+  const indice = espectro ? ORDEM_ESPECTRO.indexOf(espectro) : -1;
+  return indice >= 0 ? indice : ORDEM_ESPECTRO.indexOf("centro");
+}
 
 export default function HomePage() {
   const eleicoes = useEleicoes();
@@ -25,17 +45,15 @@ export default function HomePage() {
 
   const porChave = useMemo(() => {
     const m = new Map<string, (typeof corridas)[number]>();
+    // Governador: prefere o turno atual **com dados**; antes de o 2º turno
+    // começar, mantém o resultado do 1º turno (já decidido) no mapa/lista.
+    const pontuacao = (c: (typeof corridas)[number]) =>
+      (c.votosValidos > 0 || c.lider != null ? 2 : 0) +
+      (c.eleicao === eleicoes.estadual.cd ? 1 : 0);
     for (const c of corridas) {
       const chave = `${c.cargo}:${c.uf}`;
       const atual = m.get(chave);
-      // Governador: prefere o resultado do turno atual (2º turno); nos estados
-      // sem disputa, mantém o do 1º turno (já decidido).
-      if (
-        !atual ||
-        (c.eleicao === eleicoes.estadual.cd && atual.eleicao !== eleicoes.estadual.cd)
-      ) {
-        m.set(chave, c);
-      }
+      if (!atual || pontuacao(c) > pontuacao(atual)) m.set(chave, c);
     }
     return m;
   }, [corridas, eleicoes.estadual.cd]);
@@ -60,9 +78,58 @@ export default function HomePage() {
     [porChave],
   );
 
+  // Presidente por UF: o /api/resumo já traz a votação dos principais
+  // candidatos de cada corrida, sem precisar de 27 requisições de resultado.
+  const presidentePorUf = useMemo(() => {
+    const m = new Map<string, (typeof corridas)[number]>();
+    for (const c of corridas) {
+      if (
+        c.cargo === 1 &&
+        c.eleicao === eleicoes.federal.cd &&
+        c.uf.toLowerCase() !== "br"
+      ) {
+        m.set(c.uf.toLowerCase(), c);
+      }
+    }
+    return m;
+  }, [corridas, eleicoes.federal.cd]);
+
+  const mapaPresidente = useMemo(() => {
+    const disputa = disputaPresidencial(presidente.data);
+    if (!disputa || disputa.candidatos.length < 2) return null;
+
+    // A ponta vermelha é o candidato mais à esquerda; a azul, o mais à direita.
+    const [a, b] = [...disputa.candidatos].sort(
+      (x, y) => pesoEspectro(x) - pesoEspectro(y),
+    ) as [CandidateResult, CandidateResult];
+
+    const estados = UFS.map((u) => {
+      const resumo = presidentePorUf.get(u.uf);
+      const votos = (numero: string) =>
+        resumo?.candidatos?.find((c) => c.numero === numero)?.votos ?? 0;
+      return { uf: u.uf, votosA: votos(a.numero), votosB: votos(b.numero) };
+    });
+
+    return {
+      candidatoA: {
+        numero: a.numero,
+        nomeUrna: a.nomeUrna,
+        siglaPartido: a.siglaPartido,
+        cor: corPartido(a.siglaPartido),
+      },
+      candidatoB: {
+        numero: b.numero,
+        nomeUrna: b.nomeUrna,
+        siglaPartido: b.siglaPartido,
+        cor: corPartido(b.siglaPartido),
+      },
+      estados,
+    };
+  }, [presidente.data, presidentePorUf]);
+
   return (
     <div className="space-y-8">
-      {resumo.isError || presidente.isError ? (
+      {resumo.isError ? (
         <Card className="p-4 text-sm text-muted-foreground">
           Não foi possível carregar os dados do TSE agora. O serviço de coleta pode estar
           reiniciando — os números aparecem assim que a conexão for restabelecida.
@@ -72,10 +139,20 @@ export default function HomePage() {
       {/* 2º turno: só os dois candidatos, em evidência */}
       <PresidenteSegundoTurno
         race={presidente.data}
-        carregando={presidente.isLoading}
         turno={eleicoes.federal.turno}
-        data={eleicoes.federal.data}
+        data={dataPresidencial(eleicoes)}
       />
+
+      {/* Heatmap do 2º turno por estado (logo abaixo dos presidentes) */}
+      {mapaPresidente ? (
+        <MapaPresidente
+          eleicao={eleicoes.federal.cd}
+          estados={mapaPresidente.estados}
+          candidatoA={mapaPresidente.candidatoA}
+          candidatoB={mapaPresidente.candidatoB}
+          carregando={resumo.isLoading}
+        />
+      ) : null}
 
       {/* Mapa */}
       <section className="grid gap-4 lg:grid-cols-5">
