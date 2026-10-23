@@ -56,6 +56,13 @@ export interface MunicipiosPresidenteOptions {
 const CARGO_PRESIDENTE = 1;
 /** Voto no exterior não tem malha municipal no mapa. */
 const UF_EXTERIOR = "zz";
+/**
+ * Pausa a varredura depois de N falhas seguidas (TSE fora/limitando). O loop
+ * espera `refreshMs` e retoma de onde parou, sem martelar a fonte.
+ */
+const MAX_FALHAS_CONSECUTIVAS = 5;
+/** Teto do backoff entre requisições quando o TSE falha. */
+const MAX_BACKOFF_MS = 30_000;
 
 /**
  * Coleta os resultados presidenciais por município **em segundo plano**.
@@ -79,6 +86,7 @@ export class MunicipiosPresidente {
   private listaPronta = false;
   private parado = false;
   private falhas = 0;
+  private falhasConsecutivas = 0;
   private dormirAcordar: (() => void) | null = null;
 
   private readonly deps: MunicipiosPresidenteOptions;
@@ -138,28 +146,34 @@ export class MunicipiosPresidente {
   }
 
   /**
-   * Executa uma única varredura (carrega a lista se necessário). Exposto para
-   * testes e para o modo `once`.
+   * Executa uma varredura (ou retoma a que foi pausada por falhas). Exposto
+   * para testes e para o modo `once`.
+   *
+   * Retorna `true` quando a fila terminou (varredura completa); `false` quando
+   * pausou por falhas consecutivas e ainda há municípios pendentes.
    */
-  async rodarUmaVez(): Promise<void> {
+  async rodarUmaVez(): Promise<boolean> {
     if (!this.listaPronta) await this.carregarLista();
-    await this.executar();
+    // Fila vazia = varredura anterior concluída: recomeça para atualizar os
+    // dados (antes, sem este rebuild, o serviço fazia só a primeira volta).
+    if (this.fila.length === 0) this.montarFila();
+    return this.executar();
   }
 
   private async loop(): Promise<void> {
     while (!this.parado) {
-      let falhou = false;
+      let concluiu = false;
       try {
-        await this.rodarUmaVez();
+        concluiu = await this.rodarUmaVez();
       } catch (err) {
-        falhou = true;
         this.deps.log.warn("falha na varredura municipal do 2º turno", {
           erro: err instanceof Error ? err.message : String(err),
         });
       }
       if (this.parado) break;
-      // Em `once`, uma falha ainda tenta de novo (uma varredura bem-sucedida).
-      if (this.deps.once && !falhou) break;
+      // Em `once`, só termina quando a varredura realmente completou; se pausou
+      // por falhas, espera e retoma os municípios que faltam.
+      if (this.deps.once && concluiu) break;
       await this.esperar(this.deps.refreshMs);
     }
   }
@@ -179,7 +193,8 @@ export class MunicipiosPresidente {
     this.listaPronta = true;
 
     const total = [...this.totais.values()].reduce((a, b) => a + b, 0);
-    const minutos = Math.ceil((total * this.deps.intervalMs) / 60_000);
+    // Estimativa grosseira: intervalo + latência média de uma requisição.
+    const minutos = Math.ceil((total * (this.deps.intervalMs + 100)) / 60_000);
     this.deps.log.info("coleta municipal do 2º turno preparada", {
       ufs: this.ufs.length,
       municipios: total,
@@ -201,14 +216,38 @@ export class MunicipiosPresidente {
     }
   }
 
-  private async executar(): Promise<void> {
+  /** Retorna true quando a fila foi totalmente consumida. */
+  private async executar(): Promise<boolean> {
     while (!this.parado && this.fila.length > 0) {
       const item = this.proximo();
       if (!item) break;
-      await this.coletar(item);
+      const ok = await this.coletar(item);
       if (this.parado) break;
-      await this.esperar(this.deps.intervalMs);
+
+      if (ok) {
+        this.falhasConsecutivas = 0;
+        await this.esperar(this.deps.intervalMs);
+        continue;
+      }
+
+      // Falha: o município volta na próxima varredura completa. A pausa por
+      // falhas seguidas evita insistir quando o TSE está fora ou limitando.
+      this.falhasConsecutivas += 1;
+      if (this.falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
+        this.deps.log.warn("pausando a varredura municipal por falhas", {
+          falhasConsecutivas: this.falhasConsecutivas,
+          restantes: this.fila.length,
+        });
+        return false;
+      }
+      const base = Math.max(this.deps.intervalMs, 250);
+      const espera = Math.min(
+        base * 2 ** Math.min(this.falhasConsecutivas, 6),
+        MAX_BACKOFF_MS,
+      );
+      await this.esperar(espera);
     }
+    return this.fila.length === 0;
   }
 
   private proximo(): Item | undefined {
@@ -226,7 +265,7 @@ export class MunicipiosPresidente {
     return this.fila.shift();
   }
 
-  private async coletar({ uf, municipio }: Item): Promise<void> {
+  private async coletar({ uf, municipio }: Item): Promise<boolean> {
     const chave = `${uf}:${municipio.cd}`;
     const agora = new Date().toISOString();
     try {
@@ -249,7 +288,7 @@ export class MunicipiosPresidente {
           semDados: true,
           atualizadoEm: agora,
         });
-        return;
+        return true;
       }
 
       const race = normalizeResultado(raw);
@@ -268,9 +307,21 @@ export class MunicipiosPresidente {
         semDados: false,
         atualizadoEm,
       });
+      return true;
     } catch (err) {
-      // Não interrompe a varredura por causa de um município; tenta de novo na
-      // próxima volta. O log é amostrado para não inundar durante uma falha.
+      // Registra o município como "sem dados agora" para o progresso do mapa
+      // fechar (e o front parar de buscar a cada 8 s); a próxima varredura
+      // sobrescreve com o resultado real. O log é amostrado para não inundar.
+      this.dados.set(chave, {
+        cd: municipio.cd,
+        cdi: municipio.cdi,
+        nome: municipio.nome,
+        uf,
+        votos: {},
+        votosValidos: 0,
+        semDados: true,
+        atualizadoEm: agora,
+      });
       this.falhas += 1;
       if (this.falhas === 1 || this.falhas % 20 === 0) {
         this.deps.log.warn("falhas na coleta municipal (amostra)", {
@@ -280,6 +331,7 @@ export class MunicipiosPresidente {
           erro: err instanceof Error ? err.message : String(err),
         });
       }
+      return false;
     }
   }
 

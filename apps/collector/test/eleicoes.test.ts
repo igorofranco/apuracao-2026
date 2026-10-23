@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TseClient } from "@apuracao/tse-client";
 import { loadConfig } from "../src/config.ts";
-import { resolverEleicoes } from "../src/eleicoes.ts";
+import { estaEmApuracao, resolverEleicoes } from "../src/eleicoes.ts";
 import { Logger } from "../src/logger.ts";
 
 /**
@@ -49,9 +49,21 @@ describe("resolverEleicoes", () => {
     );
 
     expect(eleicoes.doConfig).toBe(true);
-    expect(eleicoes.federal).toMatchObject({ cd: 6258, turno: 2 });
+    expect(eleicoes.federal).toMatchObject({
+      cd: 6258,
+      turno: 2,
+      // O config do 2º turno não traz `dt`; a data do calendário preenche.
+      data: "2026-10-25T17:00:00-03:00",
+    });
     expect(eleicoes.estadual).toMatchObject({ cd: 6260, turno: 2 });
     expect(eleicoes.primeiroTurno?.federal.cd).toBe(6257);
     expect(eleicoes.primeiroTurno?.estadual.cd).toBe(6259);
+
+    expect(
+      estaEmApuracao(eleicoes, new Date("2026-10-25T19:00:00-03:00")),
+    ).toBe(true);
+    expect(
+      estaEmApuracao(eleicoes, new Date("2026-10-20T19:00:00-03:00")),
+    ).toBe(false);
   });
 });

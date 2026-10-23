@@ -213,7 +213,13 @@ location / {
   250 ms) e guarda a votação de Presidente em memória. O web lê
   `/api/presidente/municipios?uf=sp` e pinta o mapa conforme a coleta avança;
   a UF aberta vai para a frente da fila. Com `MUNICIPIOS_POLL=false` a coleta é
-  desligada; no `POLL_MODE=once` é uma única varredura.
+  desligada; no `POLL_MODE=once` é uma única varredura completa.
+  Em falhas seguidas (TSE fora/limitando), a varredura pausa, espera
+  `MUNICIPIOS_REFRESH_MS` e retoma de onde parou, sem retry em rajada.
+  Orçamento aproximado durante a apuração: ~163 alvos/15 s no poller principal
+  (~11 req/s) + ~1 req/250 ms no municipal (~3–4 req/s contando a latência),
+  ou seja, ~15 req/s no pior caso; ocioso fica em ~6 req/s. O browser não
+  participa desse orçamento — só lê o cache do collector.
 - **Segurança (web)**: `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy` e `Strict-Transport-Security` aplicados
   pelo Next.

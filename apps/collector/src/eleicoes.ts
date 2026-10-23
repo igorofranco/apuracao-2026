@@ -58,7 +58,13 @@ function acharPorCd(lista: RawConfigEleicao[], cd: number): RawConfigEleicao | u
 }
 
 function paraResolvida(e: RawConfigEleicao): EleicaoResolvida {
-  return { cd: Number(e.cd), turno: turno(e), data: parseDataHora(e.dt, "17:00:00"), nome: e.nm ?? null };
+  const t = turno(e);
+  // O config do 2º turno às vezes não traz `dt`; usamos a data conhecida do
+  // calendário para a janela de apuração (`estaEmApuracao`) funcionar.
+  const data =
+    parseDataHora(e.dt, "17:00:00") ??
+    (t > 1 ? `${ELEICAO_2026.dataSegundoTurno}T17:00:00-03:00` : null);
+  return { cd: Number(e.cd), turno: t, data, nome: e.nm ?? null };
 }
 
 /**

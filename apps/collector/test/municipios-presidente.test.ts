@@ -83,13 +83,19 @@ function resultado(votosLula: number, votosFlavio: number): RawResultado {
 }
 
 function fakeClient(): TseClient {
-  return {
+  let chamadas = 0;
+  const client = {
     getResultado: async (o: { municipio?: string; uf: string }) => {
+      chamadas += 1;
       if (o.municipio === "71072") return resultado(600, 400);
       if (o.municipio === "60001") return resultado(450, 550);
       return resultado(10, 10);
     },
-  } as unknown as TseClient;
+    get chamadas() {
+      return chamadas;
+    },
+  };
+  return client as unknown as TseClient;
 }
 
 function fakeMunicipios(): MunicipiosCache {
@@ -117,9 +123,9 @@ function fakeMunicipios(): MunicipiosCache {
   } as unknown as MunicipiosCache;
 }
 
-function criar() {
+function criar(client: TseClient = fakeClient()) {
   return new MunicipiosPresidente({
-    client: fakeClient(),
+    client,
     municipios: fakeMunicipios(),
     eleicoes,
     log: new Logger({ level: "error" }),
@@ -151,6 +157,15 @@ describe("MunicipiosPresidente", () => {
 
     // O exterior não entra no mapa.
     expect(service.snapshot(6258, "zz")?.total).toBe(0);
+  });
+
+  it("recomeça a varredura depois de concluir a fila", async () => {
+    const client = fakeClient();
+    const service = criar(client);
+    expect(await service.rodarUmaVez()).toBe(true);
+    expect(await service.rodarUmaVez()).toBe(true);
+    // 3 municípios × 2 varreduras; a lista só é carregada uma vez.
+    expect((client as unknown as { chamadas: number }).chamadas).toBe(6);
   });
 
   it("ignora eleição diferente e UF sem dados", () => {
