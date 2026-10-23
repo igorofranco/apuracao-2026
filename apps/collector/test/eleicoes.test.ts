@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TseClient } from "@apuracao/tse-client";
 import { loadConfig } from "../src/config.ts";
-import { estaEmApuracao, resolverEleicoes } from "../src/eleicoes.ts";
+import {
+  coletaDoSegundoTurnoLiberada,
+  eleicoesSegundoTurno2026,
+  estaEmApuracao,
+  INICIO_COLETA_SEGUNDO_TURNO,
+  resolverEleicoes,
+} from "../src/eleicoes.ts";
 import { Logger } from "../src/logger.ts";
 
 /**
@@ -65,5 +71,43 @@ describe("resolverEleicoes", () => {
     expect(
       estaEmApuracao(eleicoes, new Date("2026-10-20T19:00:00-03:00")),
     ).toBe(false);
+  });
+});
+
+describe("gate hardcoded da coleta", () => {
+  it("só libera a partir de domingo, 25/10, às 16h de Brasília", () => {
+    expect(INICIO_COLETA_SEGUNDO_TURNO).toBe("2026-10-25T16:00:00-03:00");
+    expect(
+      coletaDoSegundoTurnoLiberada(
+        new Date("2026-10-25T15:59:59-03:00"),
+      ),
+    ).toBe(false);
+    expect(
+      coletaDoSegundoTurnoLiberada(new Date("2026-10-25T16:00:00-03:00")),
+    ).toBe(true);
+    // Em UTC, 16h de Brasília = 19h.
+    expect(
+      coletaDoSegundoTurnoLiberada(new Date("2026-10-25T18:59:59Z")),
+    ).toBe(false);
+    expect(
+      coletaDoSegundoTurnoLiberada(new Date("2026-10-25T19:00:00Z")),
+    ).toBe(true);
+  });
+
+  it("monta as eleições do 2º turno sem consultar o TSE", () => {
+    const eleicoes = eleicoesSegundoTurno2026();
+    expect(eleicoes.doConfig).toBe(false);
+    expect(eleicoes.federal).toMatchObject({
+      cd: 6258,
+      turno: 2,
+      data: "2026-10-25T17:00:00-03:00",
+    });
+    expect(eleicoes.estadual).toMatchObject({
+      cd: 6260,
+      turno: 2,
+      data: "2026-10-25T17:00:00-03:00",
+    });
+    expect(eleicoes.primeiroTurno?.federal.cd).toBe(6257);
+    expect(eleicoes.primeiroTurno?.estadual.cd).toBe(6259);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TseClient } from "@apuracao/tse-client";
 import { normalizeResultado, type RawResultado, type Snapshot } from "@apuracao/domain";
 import { loadConfig } from "../src/config.ts";
@@ -9,7 +9,10 @@ import type { MunicipiosPresidente } from "../src/municipios-presidente.ts";
 import { buildServer } from "../src/server.ts";
 import { RaceStore, type SnapshotRepository } from "../src/store.ts";
 import type { Poller, PollerStats } from "../src/poller.ts";
-import type { EleicoesResolvidas } from "../src/eleicoes.ts";
+import {
+  eleicoesSegundoTurno2026,
+  type EleicoesResolvidas,
+} from "../src/eleicoes.ts";
 
 const eleicoes: EleicoesResolvidas = {
   ciclo: "ele2026",
@@ -89,7 +92,10 @@ function fakeClient(): TseClient {
   return client as unknown as TseClient;
 }
 
-async function montarApp(rateMax = 1000) {
+async function montarApp(
+  rateMax = 1000,
+  eleicoesCfg: EleicoesResolvidas = eleicoes,
+) {
   const config = loadConfig({ CORS_ORIGIN: "http://localhost:3000" } as NodeJS.ProcessEnv);
   config.rateLimit.max = rateMax;
   const store = new RaceStore({ snapshotLimit: 100 });
@@ -117,12 +123,14 @@ async function montarApp(rateMax = 1000) {
     municipios: new MunicipiosCache(client, "ele2026"),
     localidades: new LocalidadesCache(client, 60_000),
     municipiosPresidente,
-    eleicoes,
+    eleicoes: eleicoesCfg,
     log,
     flags: { redis: false, redisOk: false, postgres: false },
   });
   return { app, store, client };
 }
+
+afterEach(() => vi.useRealTimers());
 
 describe("collector HTTP", () => {
   it("expõe /api/config com UFs e cargos", async () => {
@@ -175,6 +183,30 @@ describe("collector HTTP", () => {
     });
     expect(semUf.statusCode).toBe(400);
     await app.close();
+  });
+
+  it("bloqueia rotas que tocam no TSE antes de domingo às 16h", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-25T15:00:00-03:00"));
+    const { app } = await montarApp(1000, eleicoesSegundoTurno2026());
+    const antes = await app.inject({
+      method: "GET",
+      url: "/api/municipios?eleicao=6258&uf=sp",
+    });
+    expect(antes.statusCode).toBe(503);
+    await app.close();
+
+    vi.setSystemTime(new Date("2026-10-25T16:00:01-03:00"));
+    const { app: liberado } = await montarApp(
+      1000,
+      eleicoesSegundoTurno2026(),
+    );
+    const depois = await liberado.inject({
+      method: "GET",
+      url: "/api/municipios?eleicao=6258&uf=sp",
+    });
+    expect(depois.statusCode).toBe(200);
+    await liberado.close();
   });
 
   it("busca localidade sob demanda e faz cache (dedupe)", async () => {

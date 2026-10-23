@@ -10,7 +10,13 @@ import { LocalidadesCache } from "./localidades.ts";
 import { buildServer } from "./server.ts";
 import { RedisBridge } from "./broadcast.ts";
 import { Logger } from "./logger.ts";
-import { resolverEleicoes } from "./eleicoes.ts";
+import {
+  coletaDoSegundoTurnoLiberada,
+  eleicoesSegundoTurno2026,
+  INICIO_COLETA_SEGUNDO_TURNO,
+  msAteColetaDoSegundoTurno,
+  resolverEleicoes,
+} from "./eleicoes.ts";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -23,7 +29,19 @@ async function main(): Promise<void> {
     timeoutMs: config.tse.timeoutMs,
   });
 
-  const eleicoes = await resolverEleicoes(client, config, log);
+  // Antes das 16h de domingo não tocamos no TSE: usamos os códigos conhecidos
+  // do 2º turno de 2026 e só resolvemos o config depois da liberação.
+  const liberada = coletaDoSegundoTurnoLiberada();
+  const eleicoes = liberada
+    ? await resolverEleicoes(client, config, log)
+    : eleicoesSegundoTurno2026();
+  if (!liberada) {
+    log.info("coleta do 2º turno ainda não liberada; usando eleições hardcoded", {
+      inicio: INICIO_COLETA_SEGUNDO_TURNO,
+      federal: eleicoes.federal.cd,
+      estadual: eleicoes.estadual.cd,
+    });
+  }
 
   const repo = config.databaseUrl
     ? await createPostgresRepo({ connectionString: config.databaseUrl, log })
@@ -81,30 +99,56 @@ async function main(): Promise<void> {
     estadual: eleicoes.estadual.cd,
   });
 
-  // Coleta: no modo `once` faz uma única rodada no boot (repovoa a memória do
-  // painel após restart) e para; caso contrário, polling contínuo normal.
-  if (config.poll.mode === "once") {
-    log.info("polling em modo once: uma rodada no boot e para");
-    void poller.runOnce().catch((err) => {
-      log.warn("rodada única de boot falhou", {
-        erro: err instanceof Error ? err.message : String(err),
+  const iniciarColeta = () => {
+    // Coleta principal: no modo `once` faz uma única rodada e para; caso
+    // contrário, polling contínuo normal.
+    if (config.poll.mode === "once") {
+      log.info("polling em modo once: uma rodada e para");
+      void poller.runOnce().catch((err) => {
+        log.warn("rodada única falhou", {
+          erro: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
-  } else {
-    poller.start();
-  }
+    } else {
+      poller.start();
+    }
 
-  // Coleta municipal do 2º turno: gradual, em segundo plano, para o mapa por
-  // município. No modo `once` faz uma única varredura e para.
-  if (config.municipios.enabled && eleicoes.federal.turno > 1) {
-    log.info("coleta municipal do 2º turno habilitada", {
-      intervaloMs: config.municipios.intervalMs,
-      refreshMs: config.municipios.refreshMs,
-      modo: config.poll.mode,
+    // Coleta municipal do 2º turno: gradual, em segundo plano, para o mapa por
+    // município. No modo `once` faz uma única varredura e para.
+    if (config.municipios.enabled && eleicoes.federal.turno > 1) {
+      log.info("coleta municipal do 2º turno habilitada", {
+        intervaloMs: config.municipios.intervalMs,
+        refreshMs: config.municipios.refreshMs,
+        modo: config.poll.mode,
+      });
+      municipiosPresidente.iniciar();
+    } else if (!config.municipios.enabled) {
+      log.info(
+        "coleta municipal do 2º turno desabilitada (MUNICIPIOS_POLL=false)",
+      );
+    }
+  };
+
+  // Gate hardcoded: nada de requisição ao TSE antes de domingo, 25/10, 16h
+  // (horário de Brasília). O servidor sobe normalmente e serve o painel vazio;
+  // a coleta é agendada para a liberação.
+  let inicioTimer: NodeJS.Timeout | undefined;
+  if (coletaDoSegundoTurnoLiberada()) {
+    iniciarColeta();
+  } else {
+    const espera = msAteColetaDoSegundoTurno();
+    log.info("coleta do 2º turno agendada", {
+      inicio: INICIO_COLETA_SEGUNDO_TURNO,
+      emMinutos: Math.ceil(espera / 60_000),
     });
-    municipiosPresidente.iniciar();
-  } else if (!config.municipios.enabled) {
-    log.info("coleta municipal do 2º turno desabilitada (MUNICIPIOS_POLL=false)");
+    inicioTimer = setTimeout(() => {
+      inicioTimer = undefined;
+      log.info("liberando a coleta do 2º turno", {
+        inicio: INICIO_COLETA_SEGUNDO_TURNO,
+      });
+      iniciarColeta();
+    }, espera);
+    inicioTimer.unref?.();
   }
 
   // Retenção do histórico (limpa snapshots antigos no Postgres).
@@ -130,6 +174,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string) => {
     log.info("encerrando", { sinal: signal });
+    if (inicioTimer) clearTimeout(inicioTimer);
     poller.stop();
     municipiosPresidente.parar();
     if (pruneTimer) clearInterval(pruneTimer);

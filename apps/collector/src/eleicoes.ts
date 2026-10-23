@@ -29,6 +29,66 @@ export interface EleicoesResolvidas {
   doConfig: boolean;
 }
 
+/**
+ * Início hardcoded da coleta do 2º turno de 2026: domingo, 25/10, às 16h de
+ * Brasília. Antes disso o collector não faz nenhuma requisição ao TSE.
+ *
+ * É específico desta eleição. Para reutilizar o projeto em outro pleito, troque
+ * a data (ou remova o gate).
+ */
+export const INICIO_COLETA_SEGUNDO_TURNO = "2026-10-25T16:00:00-03:00";
+
+export function coletaDoSegundoTurnoLiberada(now = new Date()): boolean {
+  return now.getTime() >= new Date(INICIO_COLETA_SEGUNDO_TURNO).getTime();
+}
+
+/** Milissegundos até a liberação (0 quando já passou). */
+export function msAteColetaDoSegundoTurno(now = new Date()): number {
+  return Math.max(
+    0,
+    new Date(INICIO_COLETA_SEGUNDO_TURNO).getTime() - now.getTime(),
+  );
+}
+
+/**
+ * Eleições do 2º turno hardcoded para o boot antes das 16h, sem tocar no TSE.
+ * Os códigos são os mesmos que o config resolveria; a data preenche a janela
+ * usada por `estaEmApuracao`.
+ */
+export function eleicoesSegundoTurno2026(): EleicoesResolvidas {
+  const dataSegundo = `${ELEICAO_2026.dataSegundoTurno}T17:00:00-03:00`;
+  return {
+    ciclo: ELEICAO_2026.ciclo,
+    federal: {
+      cd: ELEICAO_2026.eleicoes.federalSegundoTurno,
+      turno: 2,
+      data: dataSegundo,
+      nome: "Federal · 2º turno (hardcoded)",
+    },
+    estadual: {
+      cd: ELEICAO_2026.eleicoes.estadualSegundoTurno,
+      turno: 2,
+      data: dataSegundo,
+      nome: "Estadual · 2º turno (hardcoded)",
+    },
+    primeiroTurno: {
+      federal: {
+        cd: ELEICAO_2026.eleicoes.federal,
+        turno: 1,
+        data: `${ELEICAO_2026.data}T17:00:00-03:00`,
+        nome: "Federal · 1º turno",
+      },
+      estadual: {
+        cd: ELEICAO_2026.eleicoes.estadual,
+        turno: 1,
+        data: `${ELEICAO_2026.data}T17:00:00-03:00`,
+        nome: "Estadual · 1º turno",
+      },
+    },
+    doConfig: false,
+  };
+}
+
 const turno = (e: RawConfigEleicao): number => Number(e.t ?? "1") || 1;
 
 /**

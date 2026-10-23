@@ -202,6 +202,15 @@ location / {
   votos, os dois candidatos aparecem com 0% e a apuração/evolução fica oculta.
   Presidente também é coletado **por UF** (`<uf>-c0001-e<eleição>-u.json`) para
   alimentar o mapa por estado do 2º turno.
+- **Início da coleta de 2026**: hardcoded para **25/10 às 16h (Brasília)** em
+  `apps/collector/src/eleicoes.ts`. Antes disso o collector sobe com 6258/6260
+  hardcoded, não consulta o config nem os resultados do TSE, e as rotas de
+  drill-down sob demanda (`/api/municipios` e `/api/resultado` com
+  `municipio`/`zona`) respondem **503**. Às 16h a coleta principal e a
+  varredura municipal começam automaticamente; se o processo reiniciar depois
+  das 16h, começa na hora. Para a apuração, mantenha `POLL_MODE=continuous`
+  (`once` faria apenas uma rodada). O gate é específico de 2026 — troque a data
+  para reutilizar em outro pleito.
 - **Proteção**: rate limit global por IP e limite de conexões SSE por IP
   (`MAX_SSE_PER_IP`); CORS restrito às origens configuradas.
 - **Coleta desligada**: com `POLL_MODE=once` o collector faz uma única rodada no

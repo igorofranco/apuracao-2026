@@ -4,7 +4,10 @@ import rateLimit from "@fastify/rate-limit";
 import { CARGOS, UFS } from "@apuracao/shared";
 import type { TseClient } from "@apuracao/tse-client";
 import type { CollectorConfig } from "./config.ts";
-import type { EleicoesResolvidas } from "./eleicoes.ts";
+import {
+  coletaDoSegundoTurnoLiberada,
+  type EleicoesResolvidas,
+} from "./eleicoes.ts";
 import type { LocalidadesCache } from "./localidades.ts";
 import type { Logger } from "./logger.ts";
 import type { MunicipiosCache } from "./municipios.ts";
@@ -57,6 +60,14 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
 
   const ssePorIp = new Map<string, number>();
   const totalSse = () => [...ssePorIp.values()].reduce((a, b) => a + b, 0);
+  // Antes da liberação hardcoded (domingo 16h), rotas que buscam localidade
+  // sob demanda no TSE ficam bloqueadas. O store e o /api/resumo não tocam no
+  // TSE e continuam normais.
+  const coletaBloqueada = () =>
+    deps.eleicoes.federal.turno > 1 && !coletaDoSegundoTurnoLiberada();
+  const respostaBloqueada = {
+    error: "coleta do 2º turno começa em 25/10 às 16h (horário de Brasília)",
+  };
 
   app.get("/health", async () => ({ ok: true }));
 
@@ -123,6 +134,9 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     const uf = (q.uf ?? "br").toLowerCase();
 
     if (q.municipio || q.zona) {
+      if (coletaBloqueada()) {
+        return reply.code(503).send(respostaBloqueada);
+      }
       const race = await deps.localidades.get({
         ciclo: deps.eleicoes.ciclo,
         eleicao,
@@ -161,7 +175,10 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return { eleicao, cargo, uf, snapshots };
   });
 
-  app.get("/api/municipios", async (req) => {
+  app.get("/api/municipios", async (req, reply) => {
+    if (coletaBloqueada()) {
+      return reply.code(503).send(respostaBloqueada);
+    }
     const q = query(req);
     const eleicao = toInt(q.eleicao, deps.eleicoes.estadual.cd);
     const uf = (q.uf ?? "sp").toLowerCase();
