@@ -3,8 +3,13 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ELEICAO_2026, getUf } from "@apuracao/shared";
-import { useMunicipios, useResultado } from "@/lib/queries";
+import { getUf } from "@apuracao/shared";
+import {
+  useEleicoes,
+  useMunicipios,
+  useResultadoEstadual,
+} from "@/lib/queries";
+import { eleicaoMunicipios } from "@/lib/eleicoes";
 import { CargoTabs, useCargoAtivo } from "@/components/cargo-tabs";
 import { ErrorCard } from "@/components/error-card";
 import { RaceDetail } from "@/components/race-detail";
@@ -19,19 +24,19 @@ function MunicipioContent() {
   const uf = (params.uf ?? "").toLowerCase();
   const municipio = params.municipio ?? "";
   const ufInfo = getUf(uf);
+  const eleicoes = useEleicoes();
   const { cargos, cargoAtivo, selecionar } = useCargoAtivo(
     uf,
     `/uf/${uf}/${municipio}`,
   );
 
   const municipios = useMunicipios({
-    eleicao: ELEICAO_2026.eleicoes.estadual,
+    eleicao: eleicaoMunicipios(eleicoes),
     uf,
   });
   const municipioInfo = municipios.data?.municipios.find((m) => m.cd === municipio);
 
-  const race = useResultado({
-    eleicao: ELEICAO_2026.eleicoes.estadual,
+  const race = useResultadoEstadual(eleicoes, {
     cargo: cargoAtivo?.codigo ?? 3,
     uf,
     municipio,

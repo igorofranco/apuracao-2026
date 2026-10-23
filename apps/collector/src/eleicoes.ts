@@ -14,19 +14,43 @@ export interface EleicaoResolvida {
 
 export interface EleicoesResolvidas {
   ciclo: string;
+  /** Eleição do turno atual (maior turno): Presidente/Governador no 2º turno. */
   federal: EleicaoResolvida;
   estadual: EleicaoResolvida;
+  /**
+   * Eleições do 1º turno, presentes quando o turno atual já é o 2º. É delas que
+   * vêm os cargos decididos no 1º turno (Senador, Dep. Federal/Estadual/Distrital).
+   */
+  primeiroTurno?: {
+    federal: EleicaoResolvida;
+    estadual: EleicaoResolvida;
+  };
   /** true quando os códigos vieram do config do TSE (não do fallback). */
   doConfig: boolean;
 }
 
 const turno = (e: RawConfigEleicao): number => Number(e.t ?? "1") || 1;
 
-/** Escolhe, por tipo de pleito (tp), a eleição de maior turno (cobre 2º turno). */
-function escolherPorTipo(lista: RawConfigEleicao[], tp: string): RawConfigEleicao | undefined {
+/**
+ * Escolhe, por tipo de pleito (tp), a eleição de maior turno (padrão, cobre o
+ * 2º turno) ou de menor turno (para localizar o 1º turno).
+ */
+function escolherPorTipo(
+  lista: RawConfigEleicao[],
+  tp: string,
+  modo: "maior" | "menor" = "maior",
+): RawConfigEleicao | undefined {
   const candidatas = lista.filter((e) => e.tp === tp);
   if (candidatas.length === 0) return undefined;
-  return candidatas.reduce((a, b) => (turno(b) > turno(a) ? b : a));
+  return candidatas.reduce((a, b) =>
+    modo === "maior"
+      ? turno(b) > turno(a)
+        ? b
+        : a
+      : turno(b) < turno(a)
+        ? b
+        : a,
+  );
 }
 
 function acharPorCd(lista: RawConfigEleicao[], cd: number): RawConfigEleicao | undefined {
@@ -79,15 +103,34 @@ export async function resolverEleicoes(
       ? acharPorCd(eleicoes, config.tse.eleicaoEstadual)
       : escolherPorTipo(eleicoes, "1");
 
+    const federal = federalCfg ? paraResolvida(federalCfg) : fallback.federal;
+    const estadual = estadualCfg ? paraResolvida(estadualCfg) : fallback.estadual;
+
+    // 1º turno: quando o turno atual é o 2º, mantemos também a eleição anterior
+    // para não perder os cargos já decididos (Senador, Deputados).
+    const federal1Cfg = escolherPorTipo(eleicoes, "8", "menor");
+    const estadual1Cfg = escolherPorTipo(eleicoes, "1", "menor");
+    const primeiroTurno =
+      federal.turno > 1 || estadual.turno > 1
+        ? {
+            federal: federal1Cfg ? paraResolvida(federal1Cfg) : federal,
+            estadual: estadual1Cfg ? paraResolvida(estadual1Cfg) : estadual,
+          }
+        : undefined;
+
     const resolvidas: EleicoesResolvidas = {
       ciclo: config.tse.ciclo,
-      federal: federalCfg ? paraResolvida(federalCfg) : fallback.federal,
-      estadual: estadualCfg ? paraResolvida(estadualCfg) : fallback.estadual,
+      federal,
+      estadual,
+      ...(primeiroTurno ? { primeiroTurno } : {}),
       doConfig: Boolean(federalCfg && estadualCfg),
     };
     log.info("eleições resolvidas do config do TSE", {
       federal: `${resolvidas.federal.cd} (turno ${resolvidas.federal.turno})`,
       estadual: `${resolvidas.estadual.cd} (turno ${resolvidas.estadual.turno})`,
+      primeiroTurno: resolvidas.primeiroTurno
+        ? `federal ${resolvidas.primeiroTurno.federal.cd} · estadual ${resolvidas.primeiroTurno.estadual.cd}`
+        : "não se aplica",
     });
     return resolvidas;
   } catch (err) {

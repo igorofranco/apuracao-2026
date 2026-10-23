@@ -10,6 +10,8 @@ const API_PROXY_TARGET = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8787"
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Sem o selo flutuante do Next nas capturas de tela (E2E/inspeção visual).
+  devIndicators: false,
   transpilePackages: ["@apuracao/shared", "@apuracao/domain"],
   env: {
     // Browser fala na mesma origem; o proxy é feito aqui (dev/sem nginx) ou no nginx.

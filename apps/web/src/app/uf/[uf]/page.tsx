@@ -3,8 +3,14 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ELEICAO_2026, getUf } from "@apuracao/shared";
-import { useHistorico, useMunicipios, useResultado } from "@/lib/queries";
+import { getUf } from "@apuracao/shared";
+import {
+  useEleicoes,
+  useHistorico,
+  useMunicipios,
+  useResultadoEstadual,
+} from "@/lib/queries";
+import { eleicaoEstadualDoCargo, eleicaoMunicipios } from "@/lib/eleicoes";
 import { CargoTabs, useCargoAtivo } from "@/components/cargo-tabs";
 import { ErrorCard } from "@/components/error-card";
 import { RaceDetail } from "@/components/race-detail";
@@ -19,20 +25,27 @@ function UfContent() {
   const params = useParams<{ uf: string }>();
   const uf = (params.uf ?? "").toLowerCase();
   const ufInfo = getUf(uf);
+  const eleicoes = useEleicoes();
   const { cargos, cargoAtivo, selecionar } = useCargoAtivo(uf, `/uf/${uf}`);
 
   const resultadoParams = cargoAtivo
-    ? { eleicao: ELEICAO_2026.eleicoes.estadual, cargo: cargoAtivo.codigo, uf }
+    ? {
+        eleicao: eleicaoEstadualDoCargo(eleicoes, cargoAtivo.codigo),
+        cargo: cargoAtivo.codigo,
+        uf,
+      }
     : null;
 
-  const race = useResultado(
-    resultadoParams ?? { eleicao: 0, cargo: 0, uf: "" },
+  const race = useResultadoEstadual(
+    eleicoes,
+    { cargo: cargoAtivo?.codigo ?? 3, uf },
+    { enabled: Boolean(cargoAtivo) },
   );
   const historico = useHistorico(
     resultadoParams ?? { eleicao: 0, cargo: 0, uf: "" },
   );
   const municipios = useMunicipios({
-    eleicao: ELEICAO_2026.eleicoes.estadual,
+    eleicao: eleicaoMunicipios(eleicoes),
     uf,
   });
 

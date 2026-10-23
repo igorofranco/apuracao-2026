@@ -193,12 +193,21 @@ export function summarizeRace(race: RaceResult): RaceSummary {
   };
 }
 
+/**
+ * Limite de candidatos guardados por snapshot. O gráfico de evolução exibe no
+ * máximo 6; 12 dá margem para quem sobe ao longo da apuração sem inflar o
+ * histórico (cargos proporcionais podem ter centenas de candidatos).
+ */
+const MAX_CANDIDATOS_SNAPSHOT = 12;
+
 /** Extrai um snapshot leve para séries temporais. */
 export function snapshotFrom(
   race: RaceResult,
   capturadoEm = new Date().toISOString(),
 ): Snapshot {
   const lider = race.candidatos[0];
+  // Sem votos computados não há liderança — a ordem seria apenas alfabética.
+  const liderComVotos = lider && lider.votos > 0 ? lider : null;
   return {
     eleicao: race.eleicao,
     cargo: race.cargo,
@@ -207,9 +216,20 @@ export function snapshotFrom(
     capturadoEm,
     percentualApurado: race.secoes.percentualTotalizadas,
     votosValidos: race.votos.validos,
-    lider: lider
-      ? { numero: lider.numero, nomeUrna: lider.nomeUrna, votos: lider.votos }
+    lider: liderComVotos
+      ? {
+          numero: liderComVotos.numero,
+          nomeUrna: liderComVotos.nomeUrna,
+          votos: liderComVotos.votos,
+        }
       : null,
+    candidatos: race.candidatos.slice(0, MAX_CANDIDATOS_SNAPSHOT).map((c) => ({
+      numero: c.numero,
+      nomeUrna: c.nomeUrna,
+      siglaPartido: c.siglaPartido,
+      votos: c.votos,
+      percentual: c.percentual,
+    })),
   };
 }
 

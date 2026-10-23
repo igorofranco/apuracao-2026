@@ -1,7 +1,9 @@
 # Apuração 2026
 
-Acompanhamento **em tempo real** da apuração das Eleições Gerais de 2026 (1º turno,
-04/10/2026) com dados **oficiais e verificados** do TSE.
+Acompanhamento **em tempo real** da apuração das Eleições Gerais de 2026 com dados
+**oficiais e verificados** do TSE. O painel abre no **2º turno presidencial**
+(25/10/2026), com os dois candidatos em destaque; os demais cargos (Senador,
+Deputados e Governador) continuam acessíveis com os dados do turno correspondente.
 
 - **Web**: Next.js 16 (App Router) + React 19 + Tailwind v4 + TanStack Query + Recharts.
 - **Collector**: worker Node 26 (Fastify) que faz polling dos arquivos do TSE, valida a
@@ -191,6 +193,9 @@ location / {
 - **2º turno**: os códigos de eleição são resolvidos do config do TSE
   (`TSE_ELEICOES_AUTO=true`); ao surgir uma eleição de maior turno para o pleito,
   ela é adotada automaticamente (ou fixe via `TSE_ELEICAO_FEDERAL` / `TSE_ELEICAO_ESTADUAL`).
+  Presidente e Governador passam a ser coletados no turno atual; Senador e
+  Deputados continuam vindo da eleição do 1º turno — assim os dados já apurados
+  não desaparecem. O web resolve os códigos em `/api/config`, sem constantes fixas.
 - **Proteção**: rate limit global por IP e limite de conexões SSE por IP
   (`MAX_SSE_PER_IP`); CORS restrito às origens configuradas.
 - **Coleta desligada**: com `POLL_MODE=once` o collector faz uma única rodada no
@@ -216,10 +221,15 @@ npm run check     # typecheck + lint + test
 
 - ✅ Presidente (Brasil) + Governador, Senador, Dep. Federal, Dep. Estadual/Distrital por UF.
 - ✅ Painel com mapa do Brasil (por partido líder), ranking e andamento por estado.
+- ✅ Fotos oficiais dos candidatos no destaque presidencial, pelo `sqcand` do TSE
+  (dados abertos `foto_cand2026_<UF>_div.zip`), com fallback para o número.
+- ✅ Evolução por candidato (% × tempo) no histórico, com recorte automático do
+  início sem dados e das repetições do início/fim (mostra só o trecho útil).
 - ✅ Drill-down: UF → município → zona.
 - ✅ Tempo real via SSE; histórico e evolução temporal.
-- ✅ 2º turno: projeção **matemática** (os dois primeiros inalcançáveis pelo 3º
-  e o 1º sem 50%+1) e marca **oficial** do TSE, com os dois candidatos em
-  destaque no placar.
+- ✅ 2º turno: painel inicial com os **dois candidatos à Presidência em destaque**
+  ocupando a primeira seção (desktop e mobile), sem o painel de acompanhamento
+  personalizado. Aceita a eleição oficial do 2º turno ou a projeção
+  **matemática** (os dois primeiros inalcançáveis pelo 3º e o 1º sem 50%+1).
 - ✅ Same-origin (proxy Next/nginx), rate limit, métricas, headers de segurança e 2º turno automático.
 - ⏭️ BU por seção (boletim de urna por seção).

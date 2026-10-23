@@ -12,10 +12,18 @@ import { createServer } from "node:http";
 const PORT = Number(process.env.MOCK_PORT ?? 8787);
 const HOST = process.env.MOCK_HOST ?? "127.0.0.1";
 
+/**
+ * Cenário de 2º turno: o TSE publicou as eleições 6258 (Federal) e 6260
+ * (Estadual), e o coletor mantém também o 1º turno para Senador/Deputados.
+ */
 const ELEICOES = {
   ciclo: "ele2026",
-  federal: { cd: 6257, turno: 1, data: "2026-10-04", nome: "Federal" },
-  estadual: { cd: 6259, turno: 1, data: "2026-10-04", nome: "Estadual" },
+  federal: { cd: 6258, turno: 2, data: "2026-10-25T17:00:00-03:00", nome: "Federal" },
+  estadual: { cd: 6260, turno: 2, data: "2026-10-25T17:00:00-03:00", nome: "Estadual" },
+  primeiroTurno: {
+    federal: { cd: 6257, turno: 1, data: "2026-10-04T17:00:00-03:00", nome: "Federal" },
+    estadual: { cd: 6259, turno: 1, data: "2026-10-04T17:00:00-03:00", nome: "Estadual" },
+  },
   doConfig: true,
 };
 
@@ -100,6 +108,40 @@ const NOMES = [
   { nome: "Wagner Oliveira Luz", urna: "WAGNER OLIVEIRA" },
 ];
 
+/**
+ * Candidatos do 2º turno presidencial, conforme o arquivo oficial 6258
+ * (votação simulada). As fotos vêm do pacote público do TSE, por `sqcand`.
+ */
+const RUNOFF_PRESIDENTE = [
+  {
+    numero: "13",
+    nome: "Luiz Inácio Lula da Silva",
+    urna: "LULA",
+    partido: "PARTIDO DOS TRABALHADORES",
+    sigla: "PT",
+    coligacao: "BRASIL PRONTO PRA MAIS",
+    vice: "GERALDO ALCKMIN",
+    sqcand: "280002542548",
+    votos: 58_940_312,
+  },
+  {
+    numero: "22",
+    nome: "Flavio Nantes Bolsonaro",
+    urna: "FLAVIO BOLSONARO",
+    partido: "PARTIDO LIBERAL",
+    sigla: "PL",
+    coligacao: null,
+    vice: "ALFREDO GASPAR",
+    sqcand: "280002551544",
+    votos: 47_815_204,
+  },
+];
+
+/** Eleições em que só Presidente/Governador disputam (2 candidatos). */
+function ehRunoff(eleicao, cargo) {
+  return (eleicao === 6258 && cargo === 1) || (eleicao === 6260 && cargo === 3);
+}
+
 const round2 = (n) => Math.round(n * 100) / 100;
 
 function hash(str) {
@@ -113,7 +155,81 @@ function hash(str) {
 
 const MAJORITARIOS = new Set([1, 3, 5]);
 
-function makeCandidatos(cargo, chave) {
+/**
+ * Dois candidatos do 2º turno. Presidente usa nomes fixos; Governador é gerado
+ * de forma determinística a partir da UF.
+ */
+function makeRunoffCandidatos(cargo, chave) {
+  const finalizar = ({ candidatos, soma }) => {
+    for (const c of candidatos) c.percentual = round2((c.votos / soma) * 100);
+    return { candidatos, soma, totalVotos: soma };
+  };
+
+  if (cargo === 1) {
+    const soma = RUNOFF_PRESIDENTE.reduce((a, c) => a + c.votos, 0);
+    return finalizar({
+      soma,
+      candidatos: RUNOFF_PRESIDENTE.map((c, i) => ({
+        numero: c.numero,
+        sqcand: c.sqcand,
+        nome: c.nome,
+        nomeUrna: c.urna,
+        partido: c.partido,
+        siglaPartido: c.sigla,
+        federacao: null,
+        coligacao: c.coligacao,
+        composicao: null,
+        votos: c.votos,
+        percentual: 0,
+        posicao: i + 1,
+        eleito: false,
+        matematicamenteEleito: false,
+        matematicamenteSegundoTurno: false,
+        segundoTurnoOficial: true,
+        situacao: "2º turno",
+        vice: c.vice,
+        suplentes: [],
+      })),
+    });
+  }
+
+  const off = hash(chave) % NOMES.length;
+  const votosLider = 5_400_000 + (hash(`${chave}:1`) % 900_000);
+  const definicoes = [
+    { votos: votosLider, i: 0 },
+    { votos: Math.round(votosLider / 0.548) - votosLider, i: 3 },
+  ];
+  const candidatos = definicoes.map((d, i) => {
+    const partido = PARTIDOS[(off + d.i) % PARTIDOS.length];
+    const pessoa = NOMES[(off + d.i) % NOMES.length];
+    return {
+      numero: String(10 + ((off + d.i) % 8) * 3),
+      sqcand: null,
+      nome: pessoa.nome,
+      nomeUrna: pessoa.urna,
+      partido: partido.nome,
+      siglaPartido: partido.sigla,
+      federacao: null,
+      coligacao: `COLIGAÇÃO ${partido.sigla.toUpperCase()}`,
+      composicao: null,
+      votos: d.votos,
+      percentual: 0,
+      posicao: i + 1,
+      eleito: false,
+      matematicamenteEleito: false,
+      matematicamenteSegundoTurno: false,
+      segundoTurnoOficial: true,
+      situacao: "2º turno",
+      vice: NOMES[(off + d.i + 7) % NOMES.length].urna,
+      suplentes: [],
+    };
+  });
+  const soma = candidatos.reduce((a, c) => a + c.votos, 0);
+  return finalizar({ candidatos, soma });
+}
+
+function makeCandidatos(cargo, chave, eleicao) {
+  if (ehRunoff(eleicao, cargo)) return makeRunoffCandidatos(cargo, chave);
   const major = MAJORITARIOS.has(cargo);
   const total = major ? 6 : 16;
   const base =
@@ -173,14 +289,17 @@ function makeCandidatos(cargo, chave) {
 
 function makeRace({ eleicao, cargo, uf, municipio, zona }) {
   const chave = [uf, municipio, zona].filter(Boolean).join("-") || uf;
-  const { candidatos, soma, totalVotos } = makeCandidatos(cargo, chave);
+  const { candidatos, soma, totalVotos } = makeCandidatos(cargo, chave, eleicao);
   const abrangencia = zona ? "zona" : municipio ? "mu" : uf === "br" ? "br" : "uf";
+  const runoff = ehRunoff(eleicao, cargo);
 
   // Majoritário: quase totalizado, para o cenário de "eleição matemática" já
-  // aparecer (líder inalcançável). Demais: percentual variado.
+  // aparecer (líder inalcançável). Demais: percentual variado. No 2º turno a
+  // apuração está em curso (cenário simulado).
   const major = MAJORITARIOS.has(cargo);
-  const pct =
-    major
+  const pct = runoff
+    ? round2(88 + (hash(`${chave}:${cargo}:runoff`) % 80) / 10)
+    : major
       ? 99.2
       : round2(55 + (hash(`${chave}:${cargo}`) % 450) / 10);
 
@@ -195,8 +314,8 @@ function makeRace({ eleicao, cargo, uf, municipio, zona }) {
     cargo,
     uf,
     abrangencia,
-    geracao: "20261004184200",
-    atualizadoEm: "2026-10-04T18:42:11-03:00",
+    geracao: runoff ? "20261025194200" : "20261004184200",
+    atualizadoEm: runoff ? "2026-10-25T19:42:11-03:00" : "2026-10-04T18:42:11-03:00",
     andamento: "s",
     totalizacaoFinal: false,
     divulgarVotacao: true,
@@ -294,35 +413,85 @@ function municipiosDe(uf) {
   }));
 }
 
+/**
+ * Série de histórico: 10 gerações, sendo a 1ª sem votos e as 2 últimas
+ * repetindo o resultado final. O gráfico deve recortar as pontas e mostrar só
+ * o trecho em que os percentuais mudam.
+ *
+ * Os percentuais dos candidatos são simulados convergindo para o resultado
+ * final — o líder começa um pouco acima e vai perdendo vantagem.
+ */
 function makeHistorico(eleicao, cargo, uf) {
   const race = makeRace({ eleicao, cargo, uf });
-  const lider = race.candidatos[0];
   const pctFinal = race.secoes.percentualTotalizadas;
   const votosFinal = race.votos.validos;
-  const snapshots = Array.from({ length: 8 }, (_, i) => {
-    const fator = (i + 1) / 8;
-    const minutos = i * 6;
-    const hh = String(18 + Math.floor(minutos / 60)).padStart(2, "0");
+  const runoff = ehRunoff(eleicao, cargo);
+  const horaBase = runoff ? 19 : 18;
+  const dataBase = runoff ? "2026-10-25" : "2026-10-04";
+  const dataCompacta = dataBase.replace(/-/g, "");
+  const totalPassos = 10;
+  const ultimoComDados = 7; // 7 pontos evoluindo + 2 repetições finais
+  const candidatosFinal = race.candidatos.slice(0, 8);
+
+  const snapshot = (i) => {
+    const minutos = i * 4;
+    const hh = String(horaBase + Math.floor(minutos / 60)).padStart(2, "0");
     const mm = String(minutos % 60).padStart(2, "0");
+    const fator = i <= ultimoComDados ? i / ultimoComDados : 1;
+    const semDados = i === 0;
+    const validos = semDados ? 0 : Math.round(votosFinal * fator);
+    const apurado = semDados ? 0 : round2(pctFinal * fator);
+
+    const candidatos = candidatosFinal.map((c, j) => {
+      // Diferença inicial: o líder começa acima e os demais dividem a sobra.
+      const delta = j === 0 ? 4 : -4 / Math.max(1, candidatosFinal.length - 1);
+      const percentual = semDados
+        ? 0
+        : round2(Math.max(0, c.percentual + (1 - fator) * delta));
+      return {
+        numero: c.numero,
+        nomeUrna: c.nomeUrna,
+        siglaPartido: c.siglaPartido,
+        votos: semDados ? 0 : Math.round((validos * percentual) / 100),
+        percentual,
+      };
+    });
+
+    const lider = candidatos.reduce(
+      (a, c) => (c.votos > a.votos ? c : a),
+      candidatos[0],
+    );
+
     return {
       eleicao,
       cargo,
       uf,
-      geracao: `20261004${hh}${mm}00`,
-      capturadoEm: `2026-10-04T${hh}:${mm}:00-03:00`,
-      percentualApurado: round2(pctFinal * fator),
-      votosValidos: Math.round(votosFinal * fator),
-      lider: lider
-        ? { numero: lider.numero, nomeUrna: lider.nomeUrna, votos: Math.round(lider.votos * fator) }
-        : null,
+      geracao: `${dataCompacta}${hh}${mm}00`,
+      capturadoEm: `${dataBase}T${hh}:${mm}:00-03:00`,
+      percentualApurado: apurado,
+      votosValidos: validos,
+      lider:
+        lider && lider.votos > 0
+          ? { numero: lider.numero, nomeUrna: lider.nomeUrna, votos: lider.votos }
+          : null,
+      candidatos,
     };
-  });
-  return { eleicao, cargo, uf, snapshots };
+  };
+
+  return {
+    eleicao,
+    cargo,
+    uf,
+    snapshots: Array.from({ length: totalPassos }, (_, i) => snapshot(i)),
+  };
 }
 
 function buildResumo() {
-  const corridas = [makeSummary(6257, 1, "br")];
+  const corridas = [makeSummary(6258, 1, "br")];
   for (const u of UFS) {
+    // Governador: 2º turno + 1º turno (fallback de estados sem disputa).
+    // Senador segue com os dados do 1º turno.
+    corridas.push(makeSummary(6260, 3, u.uf));
     corridas.push(makeSummary(6259, 3, u.uf));
     corridas.push(makeSummary(6259, 5, u.uf));
   }

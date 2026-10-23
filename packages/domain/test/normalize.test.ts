@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import { normalizeMunicipios, normalizeResultado, summarizeRace } from "../src/index.ts";
+import {
+  normalizeMunicipios,
+  normalizeResultado,
+  snapshotFrom,
+  summarizeRace,
+} from "../src/index.ts";
 
 const read = (name: string): unknown =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8"));
@@ -39,6 +44,19 @@ describe("normalizeResultado", () => {
   it("não define liderança quando não há votos computados", () => {
     const resumo = summarizeRace(race);
     expect(resumo.lider).toBeNull();
+  });
+
+  it("guarda a votação por candidato no snapshot", () => {
+    const snap = snapshotFrom(race, "2026-10-25T19:00:00-03:00");
+    expect(snap.candidatos).toHaveLength(12);
+    expect(snap.candidatos?.[0]).toMatchObject({
+      numero: race.candidatos[0]?.numero,
+      nomeUrna: race.candidatos[0]?.nomeUrna,
+      siglaPartido: race.candidatos[0]?.siglaPartido,
+      votos: 0,
+      percentual: 0,
+    });
+    expect(snap.lider).toBeNull();
   });
 
   it("define liderança quando há votos computados", () => {

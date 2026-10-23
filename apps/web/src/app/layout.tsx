@@ -21,8 +21,9 @@ export default function RootLayout({
           <footer className="mx-auto w-full max-w-6xl px-4 pb-10 pt-4 text-xs text-muted-foreground">
             <p>
               Dados públicos e oficiais do TSE (resultados.tse.jus.br), verificados por
-              assinatura digital. Este é um projeto independente e não tem vínculo com o
-              Tribunal Superior Eleitoral.
+              assinatura digital. Fotos dos candidatos: TSE/DivulgaCand (dados abertos).
+              Este é um projeto independente e não tem vínculo com o Tribunal Superior
+              Eleitoral.
             </p>
           </footer>
         </Providers>

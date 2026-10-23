@@ -58,3 +58,41 @@ export function origemSegundoTurnoCandidato(
   if (candidato.matematicamenteSegundoTurno) return "matematico";
   return null;
 }
+
+/**
+ * De onde saiu a disputa exibida pelo destaque presidencial. Além das marcas de
+ * 2º turno (`oficial`/`matematico`), `apuracao` representa a projeção com os
+ * dois mais votados enquanto a definição ainda não foi publicada.
+ */
+export type OrigemDisputa = OrigemSegundoTurno | "apuracao";
+
+export interface DisputaPresidencial {
+  /** Os dois candidatos que disputam (ou disputarão) o 2º turno. */
+  candidatos: CandidateResult[];
+  origem: OrigemDisputa;
+}
+
+/**
+ * Resolve os **dois** candidatos em evidência na disputa presidencial.
+ *
+ * - Se o TSE marcou os dois no 1º turno, usa a marca oficial.
+ * - Se a eleição já é a do 2º turno, os dois classificados são a própria corrida.
+ * - Senão, usa a projeção matemática; por último, os dois mais votados.
+ */
+export function disputaPresidencial(
+  race: RaceResult | undefined | null,
+): DisputaPresidencial | null {
+  if (!race || race.candidatos.length === 0) return null;
+
+  const definida = segundoTurnoDaCorrida(race);
+  if (definida) return definida;
+
+  const ordenados = [...race.candidatos].sort((a, b) => a.posicao - b.posicao);
+  if (ordenados.length === 2) {
+    return { candidatos: ordenados, origem: "oficial" };
+  }
+
+  const dois = ordenados.slice(0, 2);
+  if (dois.length < 2 || dois.some((c) => c.votos <= 0)) return null;
+  return { candidatos: dois, origem: "apuracao" };
+}

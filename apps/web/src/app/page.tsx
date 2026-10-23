@@ -2,20 +2,18 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ELEICAO_2026, UFS, getCargo } from "@apuracao/shared";
-import { useResumo, useResultado } from "@/lib/queries";
-import { LiveBadge } from "@/components/live-badge";
-import { CandidateBar } from "@/components/candidate-bar";
-import { NumeroBadge } from "@/components/numero-badge";
+import { UFS } from "@apuracao/shared";
+import { useEleicoes, useResumo, useResultado } from "@/lib/queries";
+import { PresidenteSegundoTurno } from "@/components/presidente-segundo-turno";
 import { BrazilMap, type MapaDado } from "@/components/brazil-map";
-import { MeuPainel } from "@/components/meu-painel";
 import { Card, Progress, Segmented, Skeleton } from "@/components/ui";
-import { formatDateTime, formatPercent } from "@/lib/format";
+import { formatPercent } from "@/lib/format";
 
 export default function HomePage() {
+  const eleicoes = useEleicoes();
   const resumo = useResumo();
   const presidente = useResultado({
-    eleicao: ELEICAO_2026.eleicoes.federal,
+    eleicao: eleicoes.federal.cd,
     cargo: 1,
     uf: "br",
   });
@@ -27,11 +25,20 @@ export default function HomePage() {
 
   const porChave = useMemo(() => {
     const m = new Map<string, (typeof corridas)[number]>();
-    for (const c of corridas) m.set(`${c.cargo}:${c.uf}`, c);
+    for (const c of corridas) {
+      const chave = `${c.cargo}:${c.uf}`;
+      const atual = m.get(chave);
+      // Governador: prefere o resultado do turno atual (2º turno); nos estados
+      // sem disputa, mantém o do 1º turno (já decidido).
+      if (
+        !atual ||
+        (c.eleicao === eleicoes.estadual.cd && atual.eleicao !== eleicoes.estadual.cd)
+      ) {
+        m.set(chave, c);
+      }
+    }
     return m;
-  }, [corridas]);
-
-  const presResumo = porChave.get("1:br");
+  }, [corridas, eleicoes.estadual.cd]);
 
   const mapaDados: MapaDado[] = useMemo(
     () =>
@@ -53,26 +60,8 @@ export default function HomePage() {
     [porChave],
   );
 
-  const lider = presResumo?.lider ?? null;
-  const maxVotos = presidente.data?.candidatos[0]?.votos ?? 0;
-  const apuracaoIniciada = maxVotos > 0;
-  const cargoPres = getCargo(1);
-
   return (
     <div className="space-y-8">
-      <section className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">Eleições Gerais 2026</h1>
-          <p className="text-sm text-muted-foreground">
-            1º turno · 04/10/2026 · dados oficiais do TSE
-            {presResumo?.atualizadoEm
-              ? ` · atualizado ${formatDateTime(presResumo.atualizadoEm)}`
-              : ""}
-          </p>
-        </div>
-        <LiveBadge />
-      </section>
-
       {resumo.isError || presidente.isError ? (
         <Card className="p-4 text-sm text-muted-foreground">
           Não foi possível carregar os dados do TSE agora. O serviço de coleta pode estar
@@ -80,79 +69,13 @@ export default function HomePage() {
         </Card>
       ) : null}
 
-      <MeuPainel />
-
-      {/* Presidente */}
-      <section className="grid gap-4 lg:grid-cols-3">
-        <Card className="min-w-0 lg:col-span-1 p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{cargoPres?.nome}</h2>
-            <span className="tabular text-2xl font-bold">
-              {formatPercent(presidente.data?.secoes.percentualTotalizadas ?? 0, 1)}
-            </span>
-          </div>
-          <p className="mb-3 text-xs text-muted-foreground">das seções totalizadas</p>
-          <Progress
-            value={presidente.data?.secoes.percentualTotalizadas ?? 0}
-            label="Seções totalizadas"
-          />
-          <div className="mt-4 min-h-[4.5rem]">
-            {lider ? (
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Liderança
-                </div>
-                <div className="mt-1 flex items-center gap-2">
-                  <NumeroBadge numero={lider.numero} destaque tamanho="md" />
-                  <span className="min-w-0 truncate font-semibold">{lider.nomeUrna}</span>
-                  <span className="ml-auto tabular font-semibold">
-                    {formatPercent(lider.percentual)}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Apuração ainda não iniciada.
-              </p>
-            )}
-          </div>
-          <Link
-            href="/presidente"
-            className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
-          >
-            Ver apuração completa →
-          </Link>
-        </Card>
-
-        <Card className="min-w-0 lg:col-span-2 p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Disputa presidencial</h2>
-            <span className="text-xs text-muted-foreground">
-              {apuracaoIniciada ? "Top candidatos" : "Aguardando votos"}
-            </span>
-          </div>
-          {presidente.isLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-9 w-full" />
-              ))}
-            </div>
-          ) : presidente.data ? (
-            <div className="space-y-3">
-              {presidente.data.candidatos.slice(0, 6).map((c, i) => (
-                <CandidateBar
-                  key={c.numero + c.nome}
-                  candidato={c}
-                  maxVotos={maxVotos}
-                  destaque={i === 0 && apuracaoIniciada}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Sem dados ainda.</p>
-          )}
-        </Card>
-      </section>
+      {/* 2º turno: só os dois candidatos, em evidência */}
+      <PresidenteSegundoTurno
+        race={presidente.data}
+        carregando={presidente.isLoading}
+        turno={eleicoes.federal.turno}
+        data={eleicoes.federal.data}
+      />
 
       {/* Mapa */}
       <section className="grid gap-4 lg:grid-cols-5">

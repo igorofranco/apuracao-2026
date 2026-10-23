@@ -28,8 +28,33 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Eleição resolvida pelo coletor (código e turno atuais). */
+export interface EleicaoResolvida {
+  cd: number;
+  turno: number;
+  /** Data de início da apuração (ISO), quando conhecida. */
+  data: string | null;
+  nome: string | null;
+}
+
+/**
+ * Eleições resolvidas do config do TSE. `federal`/`estadual` apontam para o
+ * turno atual (2º, quando houver); `primeiroTurno` guarda as eleições anteriores,
+ * de onde vêm Senador e Deputados.
+ */
+export interface EleicoesResolvidas {
+  ciclo: string;
+  federal: EleicaoResolvida;
+  estadual: EleicaoResolvida;
+  primeiroTurno?: {
+    federal: EleicaoResolvida;
+    estadual: EleicaoResolvida;
+  };
+  doConfig: boolean;
+}
+
 export interface ResumoResponse {
-  eleicao: unknown;
+  eleicao: EleicoesResolvidas;
   total: number;
   corridas: RaceSummary[];
 }
@@ -49,7 +74,7 @@ export interface MunicipiosResponse {
 }
 
 export interface ConfigResponse {
-  eleicao: unknown;
+  eleicao: EleicoesResolvidas;
   ufs: Uf[];
   cargos: Cargo[];
 }

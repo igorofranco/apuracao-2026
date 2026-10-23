@@ -17,6 +17,7 @@ function linhaParaSnapshot(r: Record<string, unknown>): Snapshot {
     percentualApurado: Number(r.percentual_apurado ?? 0),
     votosValidos: Number(r.votos_validos ?? 0),
     lider: (r.lider as Snapshot["lider"]) ?? null,
+    candidatos: (r.candidatos as Snapshot["candidatos"]) ?? undefined,
   };
 }
 
@@ -43,8 +44,13 @@ export async function createPostgresRepo(
       capturado_em TIMESTAMPTZ NOT NULL,
       percentual_apurado NUMERIC,
       votos_validos BIGINT,
-      lider JSONB
+      lider JSONB,
+      candidatos JSONB
     );
+  `);
+  // Bancos criados antes da evolução por candidato não têm a coluna.
+  await pool.query(`
+    ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS candidatos JSONB;
   `);
   await pool.query(`
     CREATE INDEX IF NOT EXISTS snapshots_race_idx
@@ -56,8 +62,8 @@ export async function createPostgresRepo(
       try {
         await pool.query(
           `INSERT INTO snapshots
-            (eleicao, cargo, uf, geracao, capturado_em, percentual_apurado, votos_validos, lider)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            (eleicao, cargo, uf, geracao, capturado_em, percentual_apurado, votos_validos, lider, candidatos)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           [
             s.eleicao,
             s.cargo,
@@ -67,6 +73,7 @@ export async function createPostgresRepo(
             s.percentualApurado,
             s.votosValidos,
             s.lider ? JSON.stringify(s.lider) : null,
+            s.candidatos ? JSON.stringify(s.candidatos) : null,
           ],
         );
       } catch (err) {

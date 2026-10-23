@@ -28,16 +28,16 @@ const PAGINAS: Pagina[] = [
   {
     name: "painel",
     path: "/",
-    heading: /Eleições Gerais 2026/,
-    texto: /Disputa presidencial/,
+    heading: /Disputa presidencial/,
+    texto: /2º turno/,
     progresso: true,
     aoVivo: true,
   },
   {
     name: "presidente",
     path: "/presidente",
-    heading: /^Presidente$/,
-    texto: /Seções totalizadas/,
+    heading: /Disputa presidencial/,
+    texto: /seções totalizadas/i,
     progresso: true,
     aoVivo: true,
   },
@@ -241,20 +241,45 @@ test.describe("páginas", () => {
   }
 });
 
-test.describe("painel personalizado", () => {
-  const SELECAO = {
-    itens: [
-      { cargo: 1, uf: "br" },
-      { cargo: 3, uf: "mg" },
-      { cargo: 5, uf: "mg" },
-      { cargo: 3, uf: "sp" },
-      { cargo: 5, uf: "sp" },
-    ],
-    topN: 3,
-  };
+test.describe("2º turno presidencial", () => {
+  test("primeira seção mostra só os dois candidatos, sem painel personalizado", async ({
+    page,
+  }, testInfo) => {
+    const erros = monitorar(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
 
-  async function capturar(page: Page, testInfo: { project: { name: string } }, nome: string) {
-    await page.waitForTimeout(700);
+    // A seção de destaque é a primeira do conteúdo e traz exatamente 2 cartões.
+    // (O streaming do Next mantém a versão do servidor oculta por alguns ms.)
+    const heroes = page.getByTestId("presidente-segundo-turno");
+    await expect(heroes).toHaveCount(1, { timeout: 20_000 });
+    const hero = heroes.first();
+    await expect(hero).toBeVisible();
+    await expect(hero).toHaveAttribute("data-turno", "2");
+    await expect(hero.getByTestId("candidato-destaque")).toHaveCount(2, {
+      timeout: 20_000,
+    });
+    await expect(hero.getByRole("heading", { name: "LULA" })).toBeVisible();
+    await expect(
+      hero.getByRole("heading", { name: "FLAVIO BOLSONARO" }),
+    ).toBeVisible();
+
+    // Fotos oficiais do TSE (por `sqcand`) carregaram de verdade.
+    const fotos = hero.getByTestId("foto-candidato");
+    await expect(fotos).toHaveCount(2);
+    for (const foto of await fotos.all()) {
+      await expect
+        .poll(() => foto.evaluate((img: HTMLImageElement) => img.naturalWidth))
+        .toBeGreaterThan(0);
+    }
+
+    // Os dois classificados aparecem na primeira seção e em nenhuma outra.
+    await expect(page.getByTestId("candidato-destaque")).toHaveCount(2);
+
+    // O filtro de acompanhamento foi retirado do painel.
+    await expect(page.getByText("Painel personalizado")).toHaveCount(0);
+    await expect(page.getByTestId("race-mini-card")).toHaveCount(0);
+
+    await page.waitForTimeout(800);
     await semOverflowHorizontal(page);
     await semRotulosCortados(page);
     await page.addStyleTag({
@@ -263,101 +288,8 @@ test.describe("painel personalizado", () => {
     });
     const dir = `e2e/screenshots/${testInfo.project.name}`;
     mkdirSync(dir, { recursive: true });
-    await page.screenshot({ path: `${dir}/${nome}.png`, fullPage: true });
-  }
+    await page.screenshot({ path: `${dir}/segundo-turno.png`, fullPage: true });
 
-  test("recolhido por padrão; botão revela a configuração", async ({ page }, testInfo) => {
-    const erros = monitorar(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-
-    // Nada de painel é mostrado até o usuário clicar.
-    await expect(page.getByTestId("race-mini-card")).toHaveCount(0);
-    await expect(page.getByText("Começar com um atalho")).toBeHidden();
-
-    await capturar(page, testInfo, "painel-recolhido");
-
-    const botao = page.getByRole("button", { name: /Painel personalizado/ });
-    await expect(botao).toBeVisible();
-    await expect(botao).toHaveAttribute("aria-expanded", "false");
-    await botao.click();
-
-    // Expande para o editor + atalhos.
-    await expect(page.getByRole("heading", { name: "Meu painel" })).toBeVisible();
-    await expect(page.getByText("Começar com um atalho")).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: /MG \(majoritários\)/ }),
-    ).toBeVisible();
-
-    await capturar(page, testInfo, "painel-vazio");
-
-    // "Ocultar" recolhe de novo.
-    await page.getByRole("button", { name: "Ocultar" }).click();
-    await expect(page.getByText("Começar com um atalho")).toBeHidden();
-
-    expect(erros, erros.join("\n")).toEqual([]);
-  });
-
-  test("exibe as corridas escolhidas com top 3", async ({ page }, testInfo) => {
-    const erros = monitorar(page);
-    await page.addInitScript((cfg: unknown) => {
-      window.localStorage.setItem("apuracao-painel", JSON.stringify(cfg));
-    }, SELECAO);
-
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-
-    // Recolhido mostra o resumo da seleção salva.
-    const botao = page.getByRole("button", { name: /Painel personalizado/ });
-    await expect(botao).toContainText("5 corridas · top 3 de cada");
-    await botao.click();
-
-    const cards = page.getByTestId("race-mini-card");
-    await expect(cards).toHaveCount(5);
-    for (const chave of ["1:br", "3:mg", "5:mg", "3:sp", "5:sp"]) {
-      await expect(page.locator(`[data-corrida="${chave}"]`)).toBeVisible();
-    }
-    // Cada card carregou seu resultado e mostra exatamente top 3 candidatos.
-    await expect(page.getByTestId("race-mini-card").getByTestId("candidate-row")).toHaveCount(15, {
-      timeout: 20_000,
-    });
-    // A seleção sobrevive ao reload (mas o painel volta recolhido).
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByTestId("race-mini-card")).toHaveCount(0);
-    await page.getByRole("button", { name: /Painel personalizado/ }).click();
-    await expect(page.getByTestId("race-mini-card")).toHaveCount(5);
-
-    await capturar(page, testInfo, "painel-personalizado");
-    expect(erros, erros.join("\n")).toEqual([]);
-  });
-
-  test("atalho, reordenação, top 5 e remoção", async ({ page }, testInfo) => {
-    const erros = monitorar(page);
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-
-    await page.getByRole("button", { name: /Painel personalizado/ }).click();
-
-    // Atalho adiciona as três corridas de MG de uma vez.
-    await page.getByRole("button", { name: /MG \(majoritários\)/ }).click();
-    await expect(page.getByTestId("race-mini-card")).toHaveCount(3);
-    const barras = page.getByTestId("race-mini-card").getByTestId("candidate-row");
-    await expect(barras).toHaveCount(9, { timeout: 20_000 });
-
-    // Edita: muda para top 5.
-    await page.getByRole("button", { name: "Editar painel" }).click();
-    await page.getByRole("button", { name: "Top 5" }).click();
-    await expect(barras).toHaveCount(15, { timeout: 20_000 });
-
-    // Reordena: Governador MG sobe para a primeira posição.
-    await page.getByRole("button", { name: /Mover Governador Minas Gerais para cima/ }).click();
-    const chaves = await page
-      .getByTestId("race-mini-card")
-      .evaluateAll((els) => els.map((e) => e.getAttribute("data-corrida")));
-    expect(chaves).toEqual(["3:mg", "1:br", "5:mg"]);
-
-    // Remove o Senador MG.
-    await page.getByRole("button", { name: /Remover Senador Minas Gerais/ }).click();
-    await expect(page.getByTestId("race-mini-card")).toHaveCount(2);
-
-    await capturar(page, testInfo, "painel-personalizado-editado");
     expect(erros, erros.join("\n")).toEqual([]);
   });
 });
@@ -387,7 +319,7 @@ test.describe("interações", () => {
     expect(erros, erros.join("\n")).toEqual([]);
   });
 
-  test("marca o candidato matematicamente eleito (Presidente)", async ({ page }) => {
+  test("página do Presidente mantém o 2º turno em evidência", async ({ page }) => {
     const erros = monitorar(page);
 
     await page.goto("/presidente", { waitUntil: "domcontentloaded" });
@@ -395,12 +327,20 @@ test.describe("interações", () => {
       page.getByText("Ao vivo").filter({ visible: true }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    // O líder dispara no cenário do mock: aparece o badge próprio, distinto do
-    // "Eleito" oficial.
-    await expect(
-      page.getByTestId("badge-matematicamente-eleito").first(),
-    ).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("MATEMATICAMENTE ELEITO").first()).toBeVisible();
+    const heroes = page.getByTestId("presidente-segundo-turno");
+    await expect(heroes).toHaveCount(1, { timeout: 20_000 });
+    const hero = heroes.first();
+    await expect(hero).toHaveAttribute("data-turno", "2");
+    await expect(hero.getByTestId("candidato-destaque")).toHaveCount(2, {
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("progressbar").first()).toBeVisible();
+
+    // Evolução por candidato, recortando o início vazio e o fim repetido.
+    await expect(page.getByText("LULA (PT)")).toBeVisible();
+    await expect(page.getByText("FLAVIO BOLSONARO (PL)")).toBeVisible();
+    await expect(page.locator(".recharts-line")).toHaveCount(2);
+    await expect(page.getByText(/amostras úteis de 10/)).toBeVisible();
 
     expect(erros, erros.join("\n")).toEqual([]);
   });
@@ -413,13 +353,12 @@ test.describe("interações", () => {
       page.getByText("Ao vivo").filter({ visible: true }).first(),
     ).toBeVisible({ timeout: 20_000 });
 
-    // No cenário do mock o Governador não tem maioria (líder bem abaixo de 50%)
-    // e os dois primeiros já não podem ser alcançados pelo 3º: aparece a faixa e
-    // os dois ficam realçados.
+    // No cenário do mock o Governador já está no 2º turno: aparece a faixa
+    // oficial e os dois candidatos ficam realçados.
     await expect(page.getByTestId("segundo-turno")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("segundo-turno")).toHaveAttribute(
       "data-origem",
-      "matematico",
+      "oficial",
     );
     // Os dois classificados ficam realçados; o selo é só da faixa da seção.
     await expect(

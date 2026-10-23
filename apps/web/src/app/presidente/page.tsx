@@ -1,22 +1,17 @@
 "use client";
 
-import { ELEICAO_2026, getCargo } from "@apuracao/shared";
-import { useHistorico, useResultado } from "@/lib/queries";
+import { useEleicoes, useHistorico, useResultado } from "@/lib/queries";
 import { ErrorCard } from "@/components/error-card";
-import { RaceDetail } from "@/components/race-detail";
-import { RaceHeader } from "@/components/race-header";
+import { PresidenteSegundoTurno } from "@/components/presidente-segundo-turno";
 import { SnapshotTimeline } from "@/components/snapshot-timeline";
-import { TotalizadasCard } from "@/components/totalizadas-card";
 import { TurnoutPanel } from "@/components/turnout-panel";
-import { Badge, Skeleton } from "@/components/ui";
-import { formatDateTime } from "@/lib/format";
-
-const PARAMS = { eleicao: ELEICAO_2026.eleicoes.federal, cargo: 1, uf: "br" };
+import { Skeleton } from "@/components/ui";
 
 export default function PresidentePage() {
-  const race = useResultado(PARAMS);
-  const historico = useHistorico(PARAMS);
-  const cargo = getCargo(1);
+  const eleicoes = useEleicoes();
+  const params = { eleicao: eleicoes.federal.cd, cargo: 1, uf: "br" };
+  const race = useResultado(params);
+  const historico = useHistorico(params);
 
   if (race.isError) {
     return (
@@ -29,36 +24,26 @@ export default function PresidentePage() {
 
   return (
     <div className="space-y-6">
-      <RaceHeader
-        title="Presidente"
-        badge={
-          race.data?.totalizacaoFinal ? (
-            <Badge variant="success">Totalização final</Badge>
-          ) : (
-            <Badge variant="muted">Em apuração</Badge>
-          )
-        }
-        subtitle={<>Brasil · {formatDateTime(race.data?.atualizadoEm)}</>}
+      <PresidenteSegundoTurno
+        race={race.data}
+        carregando={race.isLoading}
+        turno={eleicoes.federal.turno}
+        data={eleicoes.federal.data}
+        mostrarLink={false}
       />
 
-      <TotalizadasCard value={race.data?.secoes.percentualTotalizadas ?? 0} />
-
       {race.isLoading || !race.data ? (
-        <Skeleton className="h-80 w-full" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
       ) : (
-        <RaceDetail
-          race={race.data}
-          cargo={cargo!}
-          maxBarras={12}
-          side={
-            <>
-              <TurnoutPanel race={race.data} />
-              {historico.data?.snapshots && historico.data.snapshots.length > 1 ? (
-                <SnapshotTimeline snapshots={historico.data.snapshots} />
-              ) : null}
-            </>
-          }
-        />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <TurnoutPanel race={race.data} />
+          {historico.data?.snapshots && historico.data.snapshots.length > 1 ? (
+            <SnapshotTimeline snapshots={historico.data.snapshots} />
+          ) : null}
+        </div>
       )}
     </div>
   );

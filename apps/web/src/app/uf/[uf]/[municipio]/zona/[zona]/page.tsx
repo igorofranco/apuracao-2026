@@ -2,8 +2,8 @@
 
 import { Suspense } from "react";
 import { useParams } from "next/navigation";
-import { ELEICAO_2026, getCargo, getUf } from "@apuracao/shared";
-import { useResultado } from "@/lib/queries";
+import { getCargo, getUf } from "@apuracao/shared";
+import { useEleicoes, useResultadoEstadual } from "@/lib/queries";
 import { useCargoAtivo } from "@/components/cargo-tabs";
 import { ErrorCard } from "@/components/error-card";
 import { RaceDetail } from "@/components/race-detail";
@@ -19,11 +19,11 @@ function ZonaContent() {
   const municipio = params.municipio ?? "";
   const zona = params.zona ?? "";
   const ufInfo = getUf(uf);
+  const eleicoes = useEleicoes();
   const { cargoAtivo } = useCargoAtivo(uf, `/uf/${uf}/${municipio}/zona/${zona}`);
   const cargo = cargoAtivo ?? getCargo(3);
 
-  const race = useResultado({
-    eleicao: ELEICAO_2026.eleicoes.estadual,
+  const race = useResultadoEstadual(eleicoes, {
     cargo: cargo?.codigo ?? 3,
     uf,
     municipio,

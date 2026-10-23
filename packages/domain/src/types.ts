@@ -105,6 +105,15 @@ export interface RaceResult {
   candidatos: CandidateResult[];
 }
 
+/** Votação de um candidato em um instante da apuração. */
+export interface SnapshotCandidato {
+  numero: string;
+  nomeUrna: string;
+  siglaPartido: string;
+  votos: number;
+  percentual: number;
+}
+
 /** Fotos usadas para histórico / evolução. */
 export interface Snapshot {
   eleicao: number;
@@ -115,6 +124,11 @@ export interface Snapshot {
   percentualApurado: number;
   votosValidos: number;
   lider: { numero: string; nomeUrna: string; votos: number } | null;
+  /**
+   * Votação por candidato no momento da captura. Opcional para compatibilidade
+   * com snapshots gravados antes desta informação existir.
+   */
+  candidatos?: SnapshotCandidato[];
 }
 
 /** Resumo de uma eleição/cargo para o painel inicial. */

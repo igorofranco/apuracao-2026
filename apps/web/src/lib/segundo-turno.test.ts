@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CandidateResult, RaceResult } from "@apuracao/domain";
 import {
+  disputaPresidencial,
   origemSegundoTurnoCandidato,
   segundoTurnoDaCorrida,
   temSegundoTurno,
@@ -117,6 +118,32 @@ describe("segundoTurnoDaCorrida", () => {
     const disputa = segundoTurnoDaCorrida(r);
     expect(disputa?.origem).toBe("oficial");
     expect(disputa?.candidatos.map((c) => c.numero)).toEqual(["1", "2"]);
+  });
+});
+
+describe("disputaPresidencial", () => {
+  it("usa a corrida do 2º turno quando ela já tem dois candidatos", () => {
+    const r = race(1, [cand("13", { votos: 60 }), cand("22", { votos: 50 })]);
+    const disputa = disputaPresidencial(r);
+    expect(disputa?.origem).toBe("oficial");
+    expect(disputa?.candidatos.map((c) => c.numero)).toEqual(["13", "22"]);
+  });
+
+  it("cai para os dois mais votados enquanto não há definição", () => {
+    const r = race(1, [
+      cand("1", { votos: 40, posicao: 1 }),
+      cand("2", { votos: 30, posicao: 2 }),
+      cand("3", { votos: 10, posicao: 3 }),
+    ]);
+    const disputa = disputaPresidencial(r);
+    expect(disputa?.origem).toBe("apuracao");
+    expect(disputa?.candidatos.map((c) => c.numero)).toEqual(["1", "2"]);
+  });
+
+  it("não destaca ninguém antes de existir voto", () => {
+    const r = race(1, [cand("1"), cand("2"), cand("3")]);
+    expect(disputaPresidencial(r)).toBeNull();
+    expect(disputaPresidencial(null)).toBeNull();
   });
 });
 
