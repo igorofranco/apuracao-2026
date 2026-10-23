@@ -62,6 +62,17 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // Malhas geográficas são estáticas. O asset municipal do Brasil tem
+        // ~1,2 MB (340 KB gzip); o cache longo evita baixá-lo a cada visita.
+        source: "/geo/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=604800, stale-while-revalidate=86400",
+          },
+        ],
+      },
     ];
   },
 };

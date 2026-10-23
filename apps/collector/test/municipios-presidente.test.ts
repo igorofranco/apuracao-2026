@@ -159,6 +159,45 @@ describe("MunicipiosPresidente", () => {
     expect(service.snapshot(6258, "zz")?.total).toBe(0);
   });
 
+  it("monta o snapshot nacional compacto por candidato", async () => {
+    const service = criar();
+    await service.rodarUmaVez();
+
+    const brasil = service.snapshotBrasil(6258, "13", "22");
+    expect(brasil).not.toBeNull();
+    expect(brasil?.candidatos).toEqual(["13", "22"]);
+    expect(brasil?.total).toBe(3);
+    expect(brasil?.coletados).toBe(3);
+    expect(brasil?.porUf.sp).toMatchObject({ total: 2, coletados: 2 });
+    expect(brasil?.porUf.ac).toMatchObject({ total: 1, coletados: 1 });
+    // Ordenado por cdi para o payload ser estável entre requisições.
+    expect(brasil?.municipios).toEqual([
+      ["1200013", "ac", 10, 10],
+      ["3509502", "sp", 450, 550],
+      ["3550308", "sp", 600, 400],
+    ]);
+    expect(brasil?.municipios[2]?.[2]).toBe(600);
+    expect(brasil?.municipios[2]?.[3]).toBe(400);
+
+    // Mesma revisão/candidatos: reaproveita o objeto memorizado.
+    expect(service.snapshotBrasil(6258, "13", "22")).toBe(brasil);
+  });
+
+  it("conta ciclos e progresso sem expor o payload pesado", async () => {
+    const service = criar();
+    expect(await service.rodarUmaVez()).toBe(true);
+    // O contador de ciclos é do loop contínuo; rodarUmaVez isolado não conta.
+    expect(service.stats.coletados).toBe(3);
+    expect(service.stats.revisao).toBe(3);
+    const progresso = service.progresso(6258);
+    expect(progresso).toMatchObject({
+      total: 3,
+      coletados: 3,
+      preparando: false,
+    });
+    expect(progresso?.porUf.sp).toMatchObject({ total: 2, coletados: 2 });
+  });
+
   it("recomeça a varredura depois de concluir a fila", async () => {
     const client = fakeClient();
     const service = criar(client);

@@ -40,8 +40,12 @@ export interface CollectorConfig {
      * após um restart — e não agenda mais nenhuma coleta.
      */
     mode: "continuous" | "once";
+    /** Cadência dos alvos rápidos (Presidente nacional, cartões em tempo real). */
     activeMs: number;
     idleMs: number;
+    /** Cadência dos alvos lentos (mapa por UF, governadores e cargos decididos). */
+    slowMs: number;
+    slowIdleMs: number;
     /** Teto do backoff quando o TSE está falhando repetidamente. */
     maxBackoffMs: number;
     concurrency: number;
@@ -55,7 +59,9 @@ export interface CollectorConfig {
    */
   municipios: {
     enabled: boolean;
-    /** Intervalo entre duas requisições ao TSE (ms). */
+    /** Requisições simultâneas na varredura municipal (1–4). */
+    workers: number;
+    /** Intervalo entre duas requisições de um mesmo worker (ms). */
     intervalMs: number;
     /** Espera entre o fim de uma varredura e o início da próxima (ms). */
     refreshMs: number;
@@ -99,6 +105,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollectorConfi
       mode: env.POLL_MODE === "once" ? "once" : "continuous",
       activeMs: int("POLL_ACTIVE_MS", 15_000),
       idleMs: int("POLL_IDLE_MS", 60_000),
+      slowMs: int("POLL_SLOW_MS", 60_000),
+      slowIdleMs: int("POLL_SLOW_IDLE_MS", 300_000),
       maxBackoffMs: int("POLL_MAX_BACKOFF_MS", 300_000),
       concurrency: int("POLL_CONCURRENCY", 8),
       retries: int("POLL_RETRIES", 2),
@@ -106,8 +114,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollectorConfi
     },
     municipios: {
       enabled: bool("MUNICIPIOS_POLL", true),
-      intervalMs: Math.max(0, int("MUNICIPIOS_POLL_INTERVAL_MS", 250)),
-      refreshMs: Math.max(0, int("MUNICIPIOS_REFRESH_MS", 60_000)),
+      workers: Math.max(1, Math.min(4, int("MUNICIPIOS_WORKERS", 2))),
+      intervalMs: Math.max(0, int("MUNICIPIOS_POLL_INTERVAL_MS", 150)),
+      refreshMs: Math.max(0, int("MUNICIPIOS_REFRESH_MS", 30_000)),
     },
     redisUrl: env.REDIS_URL,
     databaseUrl: env.DATABASE_URL,

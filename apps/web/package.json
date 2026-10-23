@@ -15,6 +15,7 @@
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "geo:brasil": "node scripts/geo-municipios-brasil.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

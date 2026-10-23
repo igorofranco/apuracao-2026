@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   COR_NEUTRA,
+  agruparMunicipiosPorCor,
   corMapaPresidente,
   percentualEntreDois,
   posicaoAbsoluta,
   posicoesRelativas,
+  posicoesRelativasPorId,
 } from "./mapa";
 
 const VERMELHO = "#D81E2C";
@@ -55,6 +57,48 @@ describe("posicoesRelativas", () => {
 
   it("fica neutra quando todos os estados empatam", () => {
     expect(posicoesRelativas([50, 50, 50])).toEqual([0, 0, 0]);
+  });
+});
+
+describe("posicoesRelativasPorId", () => {
+  it("ignora regiões sem votos e indexa pelo id", () => {
+    const posicoes = posicoesRelativasPorId([
+      { id: "a", votosA: 40, votosB: 60 },
+      { id: "b", votosA: 60, votosB: 40 },
+      { id: "c", votosA: 0, votosB: 0 },
+    ]);
+    expect(posicoes.get("a")).toBe(-1);
+    expect(posicoes.get("b")).toBe(1);
+    expect(posicoes.has("c")).toBe(false);
+  });
+});
+
+describe("agruparMunicipiosPorCor", () => {
+  it("agrupa por cor e ignora sem votos ou sem geometria", () => {
+    const camadas = agruparMunicipiosPorCor(
+      [
+        { id: "a", d: "M0 0", votosA: 100, votosB: 0 },
+        { id: "b", d: "M1 1", votosA: 100, votosB: 0 },
+        { id: "c", d: "M2 2", votosA: 0, votosB: 100 },
+        { id: "d", d: "", votosA: 100, votosB: 0 },
+        { id: "e", d: "M3 3", votosA: 0, votosB: 0 },
+      ],
+      new Map([
+        ["a", 1],
+        ["b", 1],
+        ["c", -1],
+        ["d", 1],
+      ]),
+      VERMELHO,
+      AZUL,
+    );
+    expect(camadas).toHaveLength(2);
+    const vermelha = camadas.find((c) => c.cor === "rgb(216, 30, 44)");
+    expect(vermelha).toMatchObject({ municipios: 2 });
+    expect(vermelha?.d).toBe("M0 0 M1 1");
+    const azul = camadas.find((c) => c.cor === "rgb(11, 61, 145)");
+    expect(azul).toMatchObject({ municipios: 1 });
+    expect(azul?.d).toBe("M2 2");
   });
 });
 

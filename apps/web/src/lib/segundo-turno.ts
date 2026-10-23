@@ -62,15 +62,70 @@ export function origemSegundoTurnoCandidato(
 /**
  * De onde saiu a disputa exibida pelo destaque presidencial. Além das marcas de
  * 2º turno (`oficial`/`matematico`), `apuracao` representa a projeção com os
- * dois mais votados enquanto a definição ainda não foi publicada.
+ * dois mais votados enquanto a definição ainda não foi publicada. `aguardando`
+ * é o fallback de identificação da dupla do 2º turno antes de o TSE publicar a
+ * corrida (votação ainda zerada).
  */
-export type OrigemDisputa = OrigemSegundoTurno | "apuracao";
+export type OrigemDisputa = OrigemSegundoTurno | "apuracao" | "aguardando";
 
 export interface DisputaPresidencial {
   /** Os dois candidatos que disputam (ou disputarão) o 2º turno. */
   candidatos: CandidateResult[];
   origem: OrigemDisputa;
 }
+
+/**
+ * Dupla do 2º turno presidencial de 2026, usada como fallback antes de o TSE
+ * publicar a corrida 6258 (ou enquanto ela chega ao collector). São apenas
+ * identificação e fotos: a votação fica zerada até o TSE publicar os números.
+ *
+ * As fotos oficiais ficam em `public/fotos/2026/br/<sqcand>.jpg`, pelo `sqcand`
+ * do TSE.
+ */
+export const CANDIDATOS_PRESIDENCIA_2026: CandidateResult[] = [
+  {
+    numero: "22",
+    sqcand: "280002551544",
+    nome: "Flavio Nantes Bolsonaro",
+    nomeUrna: "FLAVIO BOLSONARO",
+    partido: "PARTIDO LIBERAL",
+    siglaPartido: "PL",
+    federacao: null,
+    coligacao: null,
+    composicao: null,
+    votos: 0,
+    percentual: 0,
+    posicao: 1,
+    eleito: false,
+    matematicamenteEleito: false,
+    matematicamenteSegundoTurno: false,
+    segundoTurnoOficial: true,
+    situacao: "2º turno",
+    vice: "ALFREDO GASPAR",
+    suplentes: [],
+  },
+  {
+    numero: "13",
+    sqcand: "280002542548",
+    nome: "Luiz Inácio Lula da Silva",
+    nomeUrna: "LULA",
+    partido: "PARTIDO DOS TRABALHADORES",
+    siglaPartido: "PT",
+    federacao: null,
+    coligacao: "BRASIL PRONTO PRA MAIS",
+    composicao: null,
+    votos: 0,
+    percentual: 0,
+    posicao: 2,
+    eleito: false,
+    matematicamenteEleito: false,
+    matematicamenteSegundoTurno: false,
+    segundoTurnoOficial: true,
+    situacao: "2º turno",
+    vice: "GERALDO ALCKMIN",
+    suplentes: [],
+  },
+];
 
 /**
  * Resolve os **dois** candidatos em evidência na disputa presidencial.
@@ -95,4 +150,22 @@ export function disputaPresidencial(
   const dois = ordenados.slice(0, 2);
   if (dois.length < 2 || dois.some((c) => c.votos <= 0)) return null;
   return { candidatos: dois, origem: "apuracao" };
+}
+
+/**
+ * Igual a `disputaPresidencial`, mas no 2º turno cai para a dupla conhecida de
+ * 2026 quando a corrida ainda não foi publicada. Assim o destaque presidencial
+ * mostra fotos, nomes e partidos desde já, com 0 voto/0% — sem inventar
+ * apuração e sem reaproveitar números do 1º turno.
+ */
+export function disputaPresidencialComFallback(
+  race: RaceResult | undefined | null,
+  turno: number,
+): DisputaPresidencial | null {
+  const real = disputaPresidencial(race);
+  if (real) return real;
+  if (turno > 1) {
+    return { candidatos: CANDIDATOS_PRESIDENCIA_2026, origem: "aguardando" };
+  }
+  return null;
 }

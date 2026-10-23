@@ -35,6 +35,45 @@ export interface MunicipiosPresidenteSnapshot {
   municipios: MunicipioPresidente[];
 }
 
+/** Progresso agregado da varredura municipal (sem o payload pesado). */
+export interface MunicipiosPresidenteProgresso {
+  eleicao: number;
+  cargo: number;
+  total: number;
+  coletados: number;
+  preparando: boolean;
+  revisao: number;
+  /** Quantas varreduras completas já terminaram. */
+  ciclos: number;
+  atualizadoEm: string | null;
+  porUf: Record<
+    string,
+    { total: number; coletados: number; atualizadoEm: string | null }
+  >;
+}
+
+/**
+ * Snapshot global compacto para o mapa do Brasil. Cada município é uma tupla
+ * `[cdi, uf, votosA, votosB]`, já na ordem dos candidatos pedidos pelo cliente.
+ */
+export interface MunicipiosPresidenteBrasil extends MunicipiosPresidenteProgresso {
+  candidatos: [string, string];
+  municipios: Array<[string, string, number, number]>;
+}
+
+export interface MunicipiosPresidenteStats {
+  total: number;
+  coletados: number;
+  preparando: boolean;
+  revisao: number;
+  ciclos: number;
+  atualizadoEm: string | null;
+  ultimaConclusao: string | null;
+  ultimaDuracaoMs: number;
+  falhas: number;
+  rodando: boolean;
+}
+
 interface Item {
   uf: string;
   municipio: Municipio;
@@ -45,7 +84,9 @@ export interface MunicipiosPresidenteOptions {
   municipios: MunicipiosCache;
   eleicoes: EleicoesResolvidas;
   log: Logger;
-  /** Intervalo entre duas requisições ao TSE (ms). */
+  /** Requisições simultâneas (1–4). */
+  workers?: number;
+  /** Intervalo entre duas requisições de um mesmo worker (ms). */
   intervalMs: number;
   /** Espera entre o fim de uma varredura e o início da próxima (ms). */
   refreshMs: number;
@@ -63,31 +104,43 @@ const UF_EXTERIOR = "zz";
 const MAX_FALHAS_CONSECUTIVAS = 5;
 /** Teto do backoff entre requisições quando o TSE falha. */
 const MAX_BACKOFF_MS = 30_000;
+/** Latência média usada só para estimar/logar a duração da varredura. */
+const LATENCIA_ESTIMADA_MS = 130;
 
 /**
  * Coleta os resultados presidenciais por município **em segundo plano**.
  *
  * O objetivo é tirar o peso das costas do navegador e do TSE: em vez de o
- * cliente disparar centenas de requisições ao abrir um estado, um único worker
- * percorre os municípios em fila, com intervalo entre as requisições, e guarda
- * o resultado em memória. O web só lê o snapshot (`/api/presidente/municipios`)
- * e pinta o mapa conforme a coleta avança.
+ * cliente disparar centenas de requisições ao abrir um estado, um pequeno pool
+ * de workers percorre os municípios em fila, com intervalo entre as
+ * requisições, e guarda o resultado em memória. O web só lê o snapshot
+ * (`/api/presidente/municipios`) e pinta o mapa conforme a coleta avança.
  *
  * A fila é intercalada entre as UFs (um município de cada vez) para que todos
- * os estados tenham dados parciais cedo. Quando alguém abre um estado, ele vai
- * para a frente da fila (`priorizar`).
+ * os estados tenham dados parciais cedo. Não há prioridade para nenhuma UF: a
+ * ordem é sempre justa e estável entre as varreduras.
  */
 export class MunicipiosPresidente {
   private readonly dados = new Map<string, MunicipioPresidente>();
   private readonly totais = new Map<string, number>();
   private ufs: { uf: string; municipios: Municipio[] }[] = [];
   private fila: Item[] = [];
-  private readonly prioridade = new Set<string>();
   private listaPronta = false;
+  private iniciado = false;
   private parado = false;
+  private pausado = false;
   private falhas = 0;
   private falhasConsecutivas = 0;
-  private dormirAcordar: (() => void) | null = null;
+  private revisao = 0;
+  private ciclos = 0;
+  private ultimoDadoEm: string | null = null;
+  private ultimaConclusao: string | null = null;
+  private ultimaDuracaoMs = 0;
+  private readonly dorminhocos = new Set<() => void>();
+  private cacheBrasil: {
+    chave: string;
+    valor: MunicipiosPresidenteBrasil;
+  } | null = null;
 
   private readonly deps: MunicipiosPresidenteOptions;
 
@@ -97,28 +150,40 @@ export class MunicipiosPresidente {
 
   /** Inicia a varredura contínua em segundo plano. */
   iniciar(): void {
-    if (this.parado) return;
+    if (this.parado || this.iniciado) return;
+    this.iniciado = true;
     void this.loop();
   }
 
   parar(): void {
     this.parado = true;
-    this.dormirAcordar?.();
+    for (const acordar of [...this.dorminhocos]) acordar();
+  }
+
+  get totalMunicipios(): number {
+    let total = 0;
+    for (const n of this.totais.values()) total += n;
+    return total;
+  }
+
+  get stats(): MunicipiosPresidenteStats {
+    return {
+      total: this.totalMunicipios,
+      coletados: this.dados.size,
+      preparando: !this.listaPronta,
+      revisao: this.revisao,
+      ciclos: this.ciclos,
+      atualizadoEm: this.ultimoDadoEm,
+      ultimaConclusao: this.ultimaConclusao,
+      ultimaDuracaoMs: this.ultimaDuracaoMs,
+      falhas: this.falhas,
+      rodando: this.iniciado && !this.parado,
+    };
   }
 
   /**
-   * Dá prioridade a uma UF na próxima fila. Chamado quando o web abre o
-   * drill-down daquele estado; não bloqueia nem dispara requisições na hora.
-   */
-  priorizar(uf: string): void {
-    const sigla = uf.toLowerCase();
-    // Guarda mesmo antes de a lista carregar: o primeiro sweep já atende a UF.
-    if (sigla.length === 2) this.prioridade.add(sigla);
-  }
-
-  /**
-   * Snapshot da UF para o web. Enquanto a coleta não terminou, `coletados` é
-   * menor que `total` e o front pode mostrar o progresso.
+   * Snapshot de uma UF para o web (endpoint detalhado/compatibilidade).
+   * Enquanto a coleta não terminou, `coletados` é menor que `total`.
    */
   snapshot(
     eleicao: number,
@@ -136,13 +201,76 @@ export class MunicipiosPresidente {
       total: this.totais.get(sigla) ?? 0,
       coletados: municipios.length,
       preparando: !this.listaPronta,
-      atualizadoEm: municipios.reduce<string | null>(
-        (maior, m) =>
-          !maior || m.atualizadoEm > maior ? m.atualizadoEm : maior,
-        null,
-      ),
+      atualizadoEm: municipios.reduce<string | null>((maior, m) => {
+        if (m.semDados) return maior;
+        return !maior || m.atualizadoEm > maior ? m.atualizadoEm : maior;
+      }, null),
       municipios,
     };
+  }
+
+  /** Progresso agregado (leve) para status, SSE e cabeçalhos de cache. */
+  progresso(eleicao: number): MunicipiosPresidenteProgresso | null {
+    if (eleicao !== this.deps.eleicoes.federal.cd) return null;
+    const porUf: MunicipiosPresidenteProgresso["porUf"] = {};
+    for (const [uf, total] of this.totais) {
+      porUf[uf] = { total, coletados: 0, atualizadoEm: null };
+    }
+    for (const m of this.dados.values()) {
+      const p = porUf[m.uf];
+      if (!p) continue;
+      p.coletados += 1;
+      if (
+        !m.semDados &&
+        (!p.atualizadoEm || m.atualizadoEm > p.atualizadoEm)
+      ) {
+        p.atualizadoEm = m.atualizadoEm;
+      }
+    }
+    return {
+      eleicao,
+      cargo: CARGO_PRESIDENTE,
+      total: this.totalMunicipios,
+      coletados: this.dados.size,
+      preparando: !this.listaPronta,
+      revisao: this.revisao,
+      ciclos: this.ciclos,
+      atualizadoEm: this.ultimoDadoEm,
+      porUf,
+    };
+  }
+
+  /**
+   * Snapshot nacional compacto: todos os municípios em uma única resposta, já
+   * pronto para o browser (sem fan-out por UF). O resultado é memorizado por
+   * revisão + candidatos; só é remontado quando algum município muda.
+   */
+  snapshotBrasil(
+    eleicao: number,
+    a: string,
+    b: string,
+  ): MunicipiosPresidenteBrasil | null {
+    if (eleicao !== this.deps.eleicoes.federal.cd) return null;
+    const chave = `${eleicao}:${this.revisao}:${a}:${b}`;
+    if (this.cacheBrasil?.chave === chave) return this.cacheBrasil.valor;
+
+    const progresso = this.progresso(eleicao);
+    if (!progresso) return null;
+
+    const municipios: MunicipiosPresidenteBrasil["municipios"] = [];
+    for (const m of this.dados.values()) {
+      if (!m.cdi) continue;
+      municipios.push([m.cdi, m.uf, m.votos[a] ?? 0, m.votos[b] ?? 0]);
+    }
+    municipios.sort((x, y) => (x[0] < y[0] ? -1 : x[0] > y[0] ? 1 : 0));
+
+    const valor: MunicipiosPresidenteBrasil = {
+      ...progresso,
+      candidatos: [a, b],
+      municipios,
+    };
+    this.cacheBrasil = { chave, valor };
+    return valor;
   }
 
   /**
@@ -156,12 +284,16 @@ export class MunicipiosPresidente {
     if (!this.listaPronta) await this.carregarLista();
     // Fila vazia = varredura anterior concluída: recomeça para atualizar os
     // dados (antes, sem este rebuild, o serviço fazia só a primeira volta).
-    if (this.fila.length === 0) this.montarFila();
+    if (this.fila.length === 0) {
+      this.montarFila();
+      this.falhasConsecutivas = 0;
+    }
     return this.executar();
   }
 
   private async loop(): Promise<void> {
     while (!this.parado) {
+      const inicio = Date.now();
       let concluiu = false;
       try {
         concluiu = await this.rodarUmaVez();
@@ -173,6 +305,21 @@ export class MunicipiosPresidente {
       if (this.parado) break;
       // Em `once`, só termina quando a varredura realmente completou; se pausou
       // por falhas, espera e retoma os municípios que faltam.
+      if (concluiu) {
+        this.ciclos += 1;
+        this.ultimaDuracaoMs = Date.now() - inicio;
+        this.ultimaConclusao = new Date().toISOString();
+        const total = this.totalMunicipios;
+        this.deps.log.info("varredura municipal concluída", {
+          municipios: total,
+          duracaoMin: Number((this.ultimaDuracaoMs / 60_000).toFixed(1)),
+          reqPorSegundo: Number(
+            (total / Math.max(1, this.ultimaDuracaoMs / 1000)).toFixed(1),
+          ),
+          falhas: this.falhas,
+          proximaEmMs: this.deps.once ? null : this.deps.refreshMs,
+        });
+      }
       if (this.deps.once && concluiu) break;
       await this.esperar(this.deps.refreshMs);
     }
@@ -192,12 +339,18 @@ export class MunicipiosPresidente {
     this.montarFila();
     this.listaPronta = true;
 
-    const total = [...this.totais.values()].reduce((a, b) => a + b, 0);
+    const total = this.totalMunicipios;
+    const workers = Math.max(1, this.deps.workers ?? 1);
     // Estimativa grosseira: intervalo + latência média de uma requisição.
-    const minutos = Math.ceil((total * (this.deps.intervalMs + 100)) / 60_000);
+    const minutos = Math.ceil(
+      (total * (this.deps.intervalMs + LATENCIA_ESTIMADA_MS)) /
+        workers /
+        60_000,
+    );
     this.deps.log.info("coleta municipal do 2º turno preparada", {
       ufs: this.ufs.length,
       municipios: total,
+      workers,
       intervaloMs: this.deps.intervalMs,
       varreduraAproximadaMin: minutos,
       modo: this.deps.once ? "once" : "continuo",
@@ -218,55 +371,50 @@ export class MunicipiosPresidente {
 
   /** Retorna true quando a fila foi totalmente consumida. */
   private async executar(): Promise<boolean> {
-    while (!this.parado && this.fila.length > 0) {
-      const item = this.proximo();
-      if (!item) break;
-      const ok = await this.coletar(item);
-      if (this.parado) break;
+    this.pausado = false;
+    const workers = Math.max(1, this.deps.workers ?? 1);
 
-      if (ok) {
-        this.falhasConsecutivas = 0;
-        await this.esperar(this.deps.intervalMs);
-        continue;
-      }
+    const trabalhar = async () => {
+      while (!this.parado && !this.pausado && this.fila.length > 0) {
+        const item = this.fila.shift();
+        if (!item) break;
+        const ok = await this.coletar(item);
+        if (this.parado || this.pausado) break;
 
-      // Falha: o município volta na próxima varredura completa. A pausa por
-      // falhas seguidas evita insistir quando o TSE está fora ou limitando.
-      this.falhasConsecutivas += 1;
-      if (this.falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
-        this.deps.log.warn("pausando a varredura municipal por falhas", {
-          falhasConsecutivas: this.falhasConsecutivas,
-          restantes: this.fila.length,
-        });
-        return false;
-      }
-      const base = Math.max(this.deps.intervalMs, 250);
-      const espera = Math.min(
-        base * 2 ** Math.min(this.falhasConsecutivas, 6),
-        MAX_BACKOFF_MS,
-      );
-      await this.esperar(espera);
-    }
-    return this.fila.length === 0;
-  }
-
-  private proximo(): Item | undefined {
-    if (this.prioridade.size > 0) {
-      for (let i = 0; i < this.fila.length; i++) {
-        const item = this.fila[i];
-        if (item && this.prioridade.has(item.uf)) {
-          this.fila.splice(i, 1);
-          return item;
+        if (ok) {
+          this.falhasConsecutivas = 0;
+          await this.esperar(this.deps.intervalMs);
+          continue;
         }
+
+        // Falha: o município volta na próxima varredura completa. A pausa por
+        // falhas seguidas evita insistir quando o TSE está fora ou limitando.
+        this.falhasConsecutivas += 1;
+        if (this.falhasConsecutivas >= MAX_FALHAS_CONSECUTIVAS) {
+          this.pausado = true;
+          this.deps.log.warn("pausando a varredura municipal por falhas", {
+            falhasConsecutivas: this.falhasConsecutivas,
+            restantes: this.fila.length,
+          });
+          break;
+        }
+        const base = Math.max(this.deps.intervalMs, 250);
+        const espera = Math.min(
+          base * 2 ** Math.min(this.falhasConsecutivas, 6),
+          MAX_BACKOFF_MS,
+        );
+        await this.esperar(espera);
       }
-      // A UF prioritária já foi concluída nesta varredura.
-      this.prioridade.clear();
-    }
-    return this.fila.shift();
+    };
+
+    const quantidade = Math.min(workers, Math.max(1, this.fila.length));
+    await Promise.all(
+      Array.from({ length: quantidade }, () => trabalhar()),
+    );
+    return !this.pausado && this.fila.length === 0;
   }
 
   private async coletar({ uf, municipio }: Item): Promise<boolean> {
-    const chave = `${uf}:${municipio.cd}`;
     const agora = new Date().toISOString();
     try {
       const raw = await this.deps.client.getResultado({
@@ -278,7 +426,7 @@ export class MunicipiosPresidente {
       });
 
       if (!raw) {
-        this.dados.set(chave, {
+        this.registrar({
           cd: municipio.cd,
           cdi: municipio.cdi,
           nome: municipio.nome,
@@ -296,8 +444,7 @@ export class MunicipiosPresidente {
       for (const candidato of race.candidatos) {
         votos[candidato.numero] = candidato.votos;
       }
-      const atualizadoEm = race.atualizadoEm ?? agora;
-      this.dados.set(chave, {
+      this.registrar({
         cd: municipio.cd,
         cdi: municipio.cdi,
         nome: municipio.nome,
@@ -305,14 +452,14 @@ export class MunicipiosPresidente {
         votos,
         votosValidos: race.votos.validos,
         semDados: false,
-        atualizadoEm,
+        atualizadoEm: race.atualizadoEm ?? agora,
       });
       return true;
     } catch (err) {
       // Registra o município como "sem dados agora" para o progresso do mapa
       // fechar (e o front parar de buscar a cada 8 s); a próxima varredura
       // sobrescreve com o resultado real. O log é amostrado para não inundar.
-      this.dados.set(chave, {
+      this.registrar({
         cd: municipio.cd,
         cdi: municipio.cdi,
         nome: municipio.nome,
@@ -335,19 +482,28 @@ export class MunicipiosPresidente {
     }
   }
 
+  private registrar(municipio: MunicipioPresidente): void {
+    this.dados.set(`${municipio.uf}:${municipio.cd}`, municipio);
+    this.revisao += 1;
+    if (
+      !municipio.semDados &&
+      (!this.ultimoDadoEm || municipio.atualizadoEm > this.ultimoDadoEm)
+    ) {
+      this.ultimoDadoEm = municipio.atualizadoEm;
+    }
+  }
+
   /** Espera interrompível (para o shutdown não ficar preso). */
   private esperar(ms: number): Promise<void> {
     if (ms <= 0 || this.parado) return Promise.resolve();
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        this.dormirAcordar = null;
-        resolve();
-      }, ms);
-      this.dormirAcordar = () => {
+      const acordar = () => {
         clearTimeout(timer);
-        this.dormirAcordar = null;
+        this.dorminhocos.delete(acordar);
         resolve();
       };
+      const timer = setTimeout(acordar, ms);
+      this.dorminhocos.add(acordar);
     });
   }
 }

@@ -66,8 +66,10 @@ export function useResumo() {
   return useQuery({
     queryKey: ["resumo"],
     queryFn: ({ signal }) => api.resumo(signal),
-    refetchInterval: 30_000,
-    staleTime: 10_000,
+    // O poller lento (mapa por UF/governadores) atualiza a cada 60 s; o SSE
+    // antecipa a atualização quando alguma corrida muda.
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 }
 
@@ -105,27 +107,30 @@ export function useMunicipios(params: { eleicao: number; uf: string }) {
 }
 
 /**
- * Snapshot municipal do presidente para o mapa do 2º turno. O collector
- * alimenta esse cache em segundo plano; aqui só lemos e, enquanto ele enche,
- * atualizamos o progresso a cada 8 s (sem disparar requisições ao TSE).
+ * Snapshot nacional do presidente por município. O collector monta e cacheia o
+ * payload no servidor; o browser faz **uma** requisição (com ETag/cache) e usa
+ * os mesmos dados para a visão Brasil e para o drill-down da UF.
+ *
+ * Enquanto a primeira varredura enche, atualiza a cada 30 s; depois, a cada
+ * 5 min (e imediatamente quando o SSE avisa que um ciclo terminou).
  */
-export function useMunicipiosPresidente(params: {
+export function useMunicipiosPresidenteBrasil(params: {
   eleicao: number;
-  uf: string | null;
+  a: string;
+  b: string;
 }) {
   return useQuery({
-    queryKey: ["presidente-municipios", params.eleicao, params.uf ?? ""],
-    queryFn: ({ signal }) =>
-      api.presidenteMunicipios(
-        { eleicao: params.eleicao, uf: params.uf ?? "" },
-        signal,
-      ),
-    enabled: Boolean(params.uf),
-    staleTime: 30_000,
+    queryKey: ["presidente-municipios", params.eleicao, params.a, params.b],
+    queryFn: ({ signal }) => api.presidenteMunicipiosBrasil(params, signal),
+    staleTime: 15_000,
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (!data) return 10_000;
-      return data.preparando || data.coletados < data.total ? 8_000 : 60_000;
+      if (!data) return 30_000;
+      if (data.desabilitado) return false;
+      if (data.liberado === false) return 60_000;
+      return data.preparando || data.total === 0 || data.coletados < data.total
+        ? 30_000
+        : 5 * 60_000;
     },
     retry: 1,
   });

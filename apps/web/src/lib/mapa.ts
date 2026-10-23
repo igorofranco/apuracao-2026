@@ -111,6 +111,76 @@ export function posicoesRelativas(percentuais: number[]): number[] {
 }
 
 /**
+ * Posição relativa de cada região com votos, indexada pelo `id`. Regiões sem
+ * votos ficam de fora (não têm posição no gradiente).
+ */
+export function posicoesRelativasPorId(
+  itens: ReadonlyArray<{ id: string; votosA: number; votosB: number }>,
+): Map<string, number> {
+  const comVotos = itens.filter((i) => i.votosA + i.votosB > 0);
+  const percentuais = comVotos.map(
+    (i) => percentualEntreDois(i.votosA, i.votosB) ?? 0,
+  );
+  const posicoes = posicoesRelativas(percentuais);
+  return new Map(comVotos.map((item, indice) => [item.id, posicoes[indice] ?? 0]));
+}
+
+/** Município já com o caminho SVG e a votação dos dois candidatos. */
+export interface MunicipioMapa {
+  id: string;
+  d: string;
+  votosA: number;
+  votosB: number;
+}
+
+/** Conjunto de municípios que compartilham a mesma cor no mapa do Brasil. */
+export interface CamadaMapa {
+  cor: string;
+  /** Caminhos SVG concatenados (um único `<path>` por cor). */
+  d: string;
+  municipios: number;
+}
+
+/**
+ * Agrupa os municípios por cor para a visão do Brasil inteiro. Em vez de criar
+ * ~5.500 elementos SVG, concatena os caminhos em poucas dezenas de `<path>`s
+ * (um por faixa de cor). Municípios sem votos ou sem polígono ficam de fora,
+ * deixando a cor do estado aparecer por baixo.
+ *
+ * `passos` quantiza a posição no gradiente (20 = faixas de 0,05). O olho não
+ * distingue as faixas e o DOM fica minúsculo.
+ */
+export function agruparMunicipiosPorCor(
+  municipios: ReadonlyArray<MunicipioMapa>,
+  posicoes: ReadonlyMap<string, number>,
+  corA: string,
+  corB: string,
+  modoCores: ModoCores = "neutro",
+  passos = 20,
+): CamadaMapa[] {
+  const porCor = new Map<string, { caminhos: string[]; municipios: number }>();
+  for (const municipio of municipios) {
+    if (!municipio.d || municipio.votosA + municipio.votosB <= 0) continue;
+    const posicao = posicoes.get(municipio.id) ?? 0;
+    const faixa =
+      passos > 0 ? Math.round(posicao * passos) / passos : posicao;
+    const cor = corMapaPresidente(faixa, corA, corB, modoCores);
+    let camada = porCor.get(cor);
+    if (!camada) {
+      camada = { caminhos: [], municipios: 0 };
+      porCor.set(cor, camada);
+    }
+    camada.caminhos.push(municipio.d);
+    camada.municipios += 1;
+  }
+  return [...porCor.entries()].map(([cor, camada]) => ({
+    cor,
+    d: camada.caminhos.join(" "),
+    municipios: camada.municipios,
+  }));
+}
+
+/**
  * Cor do estado no gradiente.
  *
  * No modo `neutro`, parte do neutro e interpola para a cor do candidato

@@ -8,6 +8,8 @@ import type { RaceStore } from "./store.ts";
 
 export interface PollerStats {
   running: boolean;
+  /** Nº de alvos desta cadência. */
+  alvos: number;
   runs: number;
   lastRunAt: string | null;
   lastDurationMs: number;
@@ -30,11 +32,14 @@ export interface PollerDeps {
   eleicoes: EleicoesResolvidas;
   config: CollectorConfig;
   log: Logger;
+  /** Identifica a cadência nos logs/status (`rapido` ou `lento`). */
+  nome?: string;
 }
 
 export class Poller {
   readonly stats: PollerStats = {
     running: false,
+    alvos: 0,
     runs: 0,
     lastRunAt: null,
     lastDurationMs: 0,
@@ -54,6 +59,7 @@ export class Poller {
 
   constructor(deps: PollerDeps) {
     this.deps = deps;
+    this.stats.alvos = deps.targets.length;
   }
 
   start(): void {
@@ -144,7 +150,11 @@ export class Poller {
         } catch (err) {
           if (err instanceof JwsError) {
             this.stats.jwsFailures += 1;
-            log.error("assinatura JWS inválida", { corrida: raceKey(target), erro: err.message });
+            log.error("assinatura JWS inválida", {
+              poller: this.deps.nome ?? "principal",
+              corrida: raceKey(target),
+              erro: err.message,
+            });
             continue;
           }
           failures += 1;
@@ -166,12 +176,17 @@ export class Poller {
     this.stats.lastChanged = changed;
     if (changed > 0) {
       log.info("rodada com atualizações", {
+        poller: this.deps.nome ?? "principal",
         rodada: this.stats.runs,
         atualizacoes: changed,
         ms: this.stats.lastDurationMs,
       });
     } else if (failures > 0) {
-      log.warn("rodada com falhas", { rodada: this.stats.runs, falhas: failures });
+      log.warn("rodada com falhas", {
+        poller: this.deps.nome ?? "principal",
+        rodada: this.stats.runs,
+        falhas: failures,
+      });
     }
     return { changed, failures };
   }

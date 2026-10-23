@@ -71,6 +71,74 @@ export function useBrasilGeo(): Array<{ uf: string; d: string }> {
   }, [geo]);
 }
 
+/* ------------------ Malha municipal do Brasil inteiro ------------------- */
+
+interface MunicipiosBrasilAsset {
+  view: number;
+  municipios: Array<[string, string, string]>;
+}
+
+export interface MunicipioBrasilProjetado {
+  /** Código IBGE (7 dígitos). */
+  id: string;
+  uf: string;
+  /** Caminho SVG já projetado no viewBox do mapa do Brasil. */
+  d: string;
+}
+
+let municipiosBrasilCache: Promise<MunicipioBrasilProjetado[]> | null = null;
+
+function carregarMunicipiosBrasil(): Promise<MunicipioBrasilProjetado[]> {
+  municipiosBrasilCache ??= fetch("/geo/municipios-brasil.json")
+    .then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json() as Promise<MunicipiosBrasilAsset>;
+    })
+    .then((json) => {
+      if (json.view !== MAPA_VIEW) {
+        throw new Error(
+          `malha municipal do Brasil em viewBox ${json.view}, esperado ${MAPA_VIEW}`,
+        );
+      }
+      return json.municipios.map(([id, uf, d]) => ({ id, uf, d }));
+    })
+    .catch((err: unknown) => {
+      municipiosBrasilCache = null;
+      throw err;
+    });
+  return municipiosBrasilCache;
+}
+
+/**
+ * Carrega a malha municipal de todo o Brasil (asset pré-projetado) para a visão
+ * nacional do mapa. É uma requisição única e cacheável; a visão da UF continua
+ * usando a malha detalhada daquela UF (`useMunicipiosProjetados`).
+ */
+export function useBrasilMunicipiosGeo(): {
+  municipios: MunicipioBrasilProjetado[];
+  carregado: boolean;
+} {
+  const [municipios, setMunicipios] = useState<MunicipioBrasilProjetado[]>([]);
+  const [carregado, setCarregado] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    carregarMunicipiosBrasil()
+      .then((lista) => {
+        if (active) setMunicipios(lista);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setCarregado(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { municipios, carregado };
+}
+
 /* --------------------------- Malha municipal ---------------------------- */
 
 interface MunicipioProperties {

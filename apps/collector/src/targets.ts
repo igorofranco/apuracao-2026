@@ -7,6 +7,12 @@ export interface Target {
   uf: string;
   /** Rótulo para logs. */
   label: string;
+  /**
+   * Cadência do alvo:
+   * - `rapida`: cartões em destaque (Presidente nacional), a cada 15 s;
+   * - `lenta`: mapa por UF, governadores e cargos já decididos, a cada 1 min.
+   */
+  grupo: "rapida" | "lenta";
 }
 
 /**
@@ -26,6 +32,7 @@ export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
     cargo: 1,
     uf: "br",
     label: "Presidente (BR)",
+    grupo: "rapida",
   });
 
   // Presidente também é coletado por UF. O /api/resumo usa essa votação para
@@ -36,6 +43,7 @@ export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
       cargo: 1,
       uf,
       label: `Presidente (${uf.toUpperCase()})`,
+      grupo: "lenta",
     });
   }
 
@@ -53,12 +61,14 @@ export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
           cargo: cargo.codigo,
           uf,
           label: `${cargo.curto} (${uf.toUpperCase()}) · 2º turno`,
+          grupo: "lenta",
         });
         targets.push({
           eleicao: primeiroEstadual.cd,
           cargo: cargo.codigo,
           uf,
           label: `${cargo.curto} (${uf.toUpperCase()}) · 1º turno`,
+          grupo: "lenta",
         });
         continue;
       }
@@ -70,6 +80,7 @@ export function buildTargets(eleicoes: EleicoesResolvidas): Target[] {
         cargo: cargo.codigo,
         uf,
         label: `${cargo.curto} (${uf.toUpperCase()})`,
+        grupo: "lenta",
       });
     }
   }

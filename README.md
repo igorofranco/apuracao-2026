@@ -83,9 +83,14 @@ Copie `.env.example` e ajuste. As principais:
 | `LOG_LEVEL` / `LOG_FORMAT` | Log (`pretty`/`json`) | `info` / `pretty` |
 | `TSE_VERIFY_JWS` | Verifica assinatura Ed25519 dos `.jws` | `true` |
 | `TSE_ELEICOES_AUTO` | Resolve eleições (e 2º turno) do config do TSE | `true` |
-| `POLL_ACTIVE_MS` / `POLL_IDLE_MS` | Cadência com apuração ativa / ociosa (ms) | `15000` / `60000` |
+| `POLL_ACTIVE_MS` / `POLL_IDLE_MS` | Cadência **rápida** (Presidente nacional) ativa/ociosa (ms) | `15000` / `60000` |
+| `POLL_SLOW_MS` / `POLL_SLOW_IDLE_MS` | Cadência **lenta** (mapa por UF, governadores, cargos decididos) | `60000` / `300000` |
 | `POLL_MAX_BACKOFF_MS` | Teto de backoff quando o TSE falha | `300000` |
 | `POLL_MODE` | `continuous` (coleta contínua) ou `once` (uma rodada no boot e para) | `continuous` |
+| `MUNICIPIOS_POLL` | Liga a varredura municipal do 2º turno | `true` |
+| `MUNICIPIOS_WORKERS` | Requisições simultâneas na varredura municipal (1–4) | `2` |
+| `MUNICIPIOS_POLL_INTERVAL_MS` | Intervalo entre requisições de um worker (ms) | `150` |
+| `MUNICIPIOS_REFRESH_MS` | Espera entre o fim de uma varredura e a próxima (ms) | `30000` |
 | `CORS_ORIGIN` | Origem(ns) permitida(s), separadas por vírgula | `http://localhost:3000` |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | Rate limit global por IP | `300` / `60000` |
 | `MAX_SSE_PER_IP` | Conexões SSE simultâneas por IP | `10` |
@@ -114,14 +119,16 @@ O `web` é stateless e escala horizontalmente sem configuração extra.
 | Rota | Descrição |
 | --- | --- |
 | `GET /health` | Liveness (para pm2/nginx) |
-| `GET /api/status` | Saúde, eleições resolvidas e estatísticas do poller |
+| `GET /api/status` | Saúde, eleições, pollers (rápido/lento) e progresso municipal |
 | `GET /api/metrics` | Métricas Prometheus (texto) |
 | `GET /api/config` | UFs, cargos e identificadores da eleição |
 | `GET /api/resumo` | Resumo de todas as corridas (painel inicial) |
 | `GET /api/resultado?eleicao&cargo&uf[&municipio&zona]` | Resultado (store; município/zona usa cache TTL e busca no TSE) |
 | `GET /api/historico?eleicao&cargo&uf` | Snapshots (evolução temporal) |
 | `GET /api/municipios?eleicao&uf` | Municípios e zonas da UF |
-| `GET /api/live` | **SSE**: evento `update` a cada nova geração (limite por IP) |
+| `GET /api/presidente/municipios?eleicao&a&b` | **Snapshot nacional compacto** do 2º turno (`[cdi, uf, votosA, votosB]`), com ETag/cache/gzip |
+| `GET /api/presidente/municipios?eleicao&uf` | Snapshot detalhado de uma UF (compatibilidade/depuração) |
+| `GET /api/live` | **SSE**: `update` a cada nova geração e `municipios` ao fim de cada varredura (limite por IP) |
 
 ## Como os dados são obtidos
 
@@ -200,8 +207,11 @@ location / {
   não desaparecem. O web resolve os códigos em `/api/config`, sem constantes fixas.
   A Presidência **não** usa o 1º turno como fallback: enquanto o 2º turno não tem
   votos, os dois candidatos aparecem com 0% e a apuração/evolução fica oculta.
-  Presidente também é coletado **por UF** (`<uf>-c0001-e<eleição>-u.json`) para
-  alimentar o mapa por estado do 2º turno.
+  Mesmo antes de o TSE publicar a corrida 6258, o destaque já mostra a **dupla
+  conhecida do 2º turno** (fotos, nomes, partidos, número e vice) com 0 voto/0%,
+  a partir de `CANDIDATOS_PRESIDENCIA_2026`; nada é inventado. Presidente também
+  é coletado **por UF** (`<uf>-c0001-e<eleição>-u.json`) para alimentar o mapa
+  por estado do 2º turno.
 - **Início da coleta de 2026**: hardcoded para **25/10 às 16h (Brasília)** em
   `apps/collector/src/eleicoes.ts`. Antes disso o collector sobe com 6258/6260
   hardcoded, não consulta o config nem os resultados do TSE, e as rotas de
@@ -217,18 +227,25 @@ location / {
   boot (para repovoar a memória do painel após um restart, já que `hydrate()` só
   restaura o histórico do Postgres) e não agenda mais nenhuma coleta. O painel
   continua servindo `REST`/`SSE` normalmente.
-- **Coleta municipal do 2º turno**: em segundo plano, o collector percorre os
-  municípios (uma requisição por vez, `MUNICIPIOS_POLL_INTERVAL_MS`, padrão
-  250 ms) e guarda a votação de Presidente em memória. O web lê
-  `/api/presidente/municipios?uf=sp` e pinta o mapa conforme a coleta avança;
-  a UF aberta vai para a frente da fila. Com `MUNICIPIOS_POLL=false` a coleta é
-  desligada; no `POLL_MODE=once` é uma única varredura completa.
+- **Coleta municipal do 2º turno**: em segundo plano, **sem prioridade de UF**,
+  o collector percorre os municípios com 2 workers e 150 ms entre requisições
+  (`MUNICIPIOS_WORKERS`, `MUNICIPIOS_POLL_INTERVAL_MS`), completando os ~5.500
+  em **~13 min** (depende da latência do TSE). O web lê um **único snapshot
+  nacional compacto** em `/api/presidente/municipios` (tuplas
+  `[cdi, uf, votosA, votosB]`), já montado/cacheado no servidor, com **ETag,
+  cache HTTP e gzip**; a UF detalhada reaproveita o mesmo payload. Um evento SSE
+  `municipios` avisa quando cada ciclo termina; o browser não faz fan-out por
+  UF nem fala com o TSE. Com `MUNICIPIOS_POLL=false` a coleta é desligada; no
+  `POLL_MODE=once` é uma única varredura completa.
   Em falhas seguidas (TSE fora/limitando), a varredura pausa, espera
   `MUNICIPIOS_REFRESH_MS` e retoma de onde parou, sem retry em rajada.
-  Orçamento aproximado durante a apuração: ~163 alvos/15 s no poller principal
-  (~11 req/s) + ~1 req/250 ms no municipal (~3–4 req/s contando a latência),
-  ou seja, ~15 req/s no pior caso; ocioso fica em ~6 req/s. O browser não
-  participa desse orçamento — só lê o cache do collector.
+  Orçamento aproximado durante a apuração:
+  - poller **rápido** (Presidente nacional): 1 alvo/15 s (~0,07 req/s);
+  - poller **lento** (mapa por UF, governadores e cargos decididos):
+    162 alvos/60 s (~2,7 req/s);
+  - varredura municipal: ~7 req/s (2 workers, 150 ms + latência);
+  ou seja, **~10 req/s** no total. O browser não participa desse orçamento —
+  só lê o cache do collector.
 - **Segurança (web)**: `X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy` e `Strict-Transport-Security` aplicados
   pelo Next.
@@ -256,22 +273,31 @@ npm run check     # typecheck + lint + test
   (dados abertos `foto_cand2026_<UF>_div.zip`), com fallback para o número.
 - ✅ Evolução por candidato (% × tempo) no histórico, com recorte automático do
   início sem dados e das repetições do início/fim (mostra só o trecho útil).
-- ✅ Mapa do Brasil por estado no 2º turno (logo abaixo dos presidentes), com
-  heatmap entre os dois candidatos e escala **relativa** (padrão, normaliza os
-  extremos) ou **absoluta** (diferença real de votos). A paleta pode ser
-  **com neutro** (azul → neutro → vermelho) ou **sem neutro** (azul → vermelho).
-  Sem votos, o mapa fica neutro com aviso de espera.
-- ✅ Drill-down **por município no mesmo card** (clique no estado): municípios
-  sem divisas internas, contorno da UF em traço grosso, a mesma escala/paleta
-  (relativa normaliza dentro da UF) e progresso da coleta no servidor.
-  A malha fica em `apps/web/public/geo/municipios/<uf>.json` (IBGE via
-  `geodata-br`, simplificada para ~10% dos pontos). O dataset tem 5.564 dos
-  5.571 municípios atuais; os 7 criados depois ficam sem polígono.
+- ✅ Mapa do Brasil do 2º turno (logo abaixo dos presidentes) mostrando **todos
+  os municípios já na visão nacional**, cada um colorido pela própria votação.
+  A escala **relativa** (padrão) normaliza entre os municípios do país; a
+  **absoluta** usa a diferença real de votos. A paleta pode ser **com neutro**
+  (azul → neutro → vermelho) ou **sem neutro** (azul → vermelho). Na visão
+  Brasil os municípios não têm hover/clique nem divisas internas; os estados
+  ficam por cima, com borda grossa, hover e clique. Sem votos, o mapa fica
+  neutro com aviso de espera.
+- ✅ Drill-down **por município no mesmo card** (clique no estado): malha
+  detalhada da UF, municípios sem divisas internas, contorno da UF em traço
+  grosso, hover e a mesma escala/paleta (relativa normaliza dentro da UF).
+  A malha municipal do Brasil é pré-projetada em
+  `apps/web/public/geo/municipios-brasil.json` a partir de
+  `apps/web/public/geo/municipios/<uf>.json` (IBGE via `geodata-br`,
+  simplificada para ~10% dos pontos); gere com
+  `npm run geo:brasil -w @apuracao/web`. O dataset tem 5.564 municípios, dos
+  quais 5.526 têm polígono válido (38 vêm com geometria vazia na fonte); os 7
+  criados depois de 2022 não estão na malha.
 - ✅ Drill-down: UF → município → zona.
 - ✅ Tempo real via SSE; histórico e evolução temporal.
 - ✅ 2º turno: painel inicial com os **dois candidatos à Presidência em destaque**
   ocupando a primeira seção (desktop e mobile), sem o painel de acompanhamento
   personalizado. Aceita a eleição oficial do 2º turno ou a projeção
   **matemática** (os dois primeiros inalcançáveis pelo 3º e o 1º sem 50%+1).
+  As fotos e nomes da dupla aparecem **desde antes da apuração**, com 0 voto/0%
+  e o mapa no estado de espera, sem reaproveitar números do 1º turno.
 - ✅ Same-origin (proxy Next/nginx), rate limit, métricas, headers de segurança e 2º turno automático.
 - ⏭️ BU por seção (boletim de urna por seção).

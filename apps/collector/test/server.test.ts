@@ -63,6 +63,7 @@ function raw(cargo: number, uf: string, vap: string): RawResultado {
 
 const statsVazio: PollerStats = {
   running: true,
+  alvos: 0,
   runs: 0,
   lastRunAt: null,
   lastDurationMs: 0,
@@ -113,7 +114,42 @@ async function montarApp(
       atualizadoEm: null,
       municipios: [],
     }),
-    priorizar: () => {},
+    snapshotBrasil: (eleicao: number, a: string, b: string) => ({
+      eleicao,
+      cargo: 1,
+      candidatos: [a, b],
+      total: 0,
+      coletados: 0,
+      preparando: true,
+      revisao: 0,
+      ciclos: 0,
+      atualizadoEm: null,
+      porUf: {},
+      municipios: [],
+    }),
+    progresso: (eleicao: number) => ({
+      eleicao,
+      cargo: 1,
+      total: 0,
+      coletados: 0,
+      preparando: true,
+      revisao: 0,
+      ciclos: 0,
+      atualizadoEm: null,
+      porUf: {},
+    }),
+    stats: {
+      total: 0,
+      coletados: 0,
+      preparando: true,
+      revisao: 0,
+      ciclos: 0,
+      atualizadoEm: null,
+      ultimaConclusao: null,
+      ultimaDuracaoMs: 0,
+      falhas: 0,
+      rodando: false,
+    },
   } as unknown as MunicipiosPresidente;
   const app = await buildServer({
     config,
@@ -162,7 +198,7 @@ describe("collector HTTP", () => {
     await app.close();
   });
 
-  it("serve o cache municipal do presidente e exige a UF", async () => {
+  it("serve o cache municipal por UF e o snapshot nacional compacto", async () => {
     const { app } = await montarApp();
     const res = await app.inject({
       method: "GET",
@@ -177,11 +213,33 @@ describe("collector HTTP", () => {
       preparando: true,
     });
 
-    const semUf = await app.inject({
+    const nacional = await app.inject({
+      method: "GET",
+      url: "/api/presidente/municipios?eleicao=6257&a=13&b=22",
+    });
+    expect(nacional.statusCode).toBe(200);
+    expect(nacional.headers["etag"]).toBeTruthy();
+    expect(nacional.json()).toMatchObject({
+      eleicao: 6257,
+      cargo: 1,
+      candidatos: ["13", "22"],
+      total: 0,
+      municipios: [],
+    });
+
+    // Revalidação: o mesmo ETag responde 304 sem corpo.
+    const revalidado = await app.inject({
+      method: "GET",
+      url: "/api/presidente/municipios?eleicao=6257&a=13&b=22",
+      headers: { "if-none-match": nacional.headers["etag"] as string },
+    });
+    expect(revalidado.statusCode).toBe(304);
+
+    const semCandidatos = await app.inject({
       method: "GET",
       url: "/api/presidente/municipios?eleicao=6257",
     });
-    expect(semUf.statusCode).toBe(400);
+    expect(semCandidatos.statusCode).toBe(400);
     await app.close();
   });
 

@@ -12,7 +12,7 @@ import { BrazilMap, type MapaDado } from "@/components/brazil-map";
 import { Card, Progress, Segmented, Skeleton } from "@/components/ui";
 import { formatPercent } from "@/lib/format";
 import { corPartido, getPartido, type Espectro } from "@/lib/partidos";
-import { disputaPresidencial } from "@/lib/segundo-turno";
+import { disputaPresidencialComFallback } from "@/lib/segundo-turno";
 
 /** Ordem usada para escolher as pontas do gradiente (esquerda → direita). */
 const ORDEM_ESPECTRO: Espectro[] = [
@@ -95,7 +95,12 @@ export default function HomePage() {
   }, [corridas, eleicoes.federal.cd]);
 
   const mapaPresidente = useMemo(() => {
-    const disputa = disputaPresidencial(presidente.data);
+    // No 2º turno, usa a dupla conhecida mesmo antes de o TSE publicar a
+    // corrida; o mapa fica no estado de espera até chegar a apuração.
+    const disputa = disputaPresidencialComFallback(
+      presidente.data,
+      eleicoes.federal.turno,
+    );
     if (!disputa || disputa.candidatos.length < 2) return null;
 
     // A ponta vermelha é o candidato mais à esquerda; a azul, o mais à direita.
@@ -125,7 +130,7 @@ export default function HomePage() {
       },
       estados,
     };
-  }, [presidente.data, presidentePorUf]);
+  }, [presidente.data, presidentePorUf, eleicoes.federal.turno]);
 
   return (
     <div className="space-y-8">

@@ -31,6 +31,15 @@ describe("buildTargets", () => {
     for (const t of targets.filter((t) => t.cargo !== 1)) {
       expect(t.eleicao).toBe(6259);
     }
+
+    // Só o Presidente nacional fica na cadência rápida (cartões em tempo real).
+    expect(targets.filter((t) => t.grupo === "rapida")).toHaveLength(1);
+    expect(
+      targets.find((t) => t.grupo === "rapida"),
+    ).toMatchObject({ cargo: 1, uf: "br" });
+    expect(targets.filter((t) => t.grupo === "lenta")).toHaveLength(
+      targets.length - 1,
+    );
   });
 
   it("no 2º turno mantém Senador/Deputados no 1º turno", () => {

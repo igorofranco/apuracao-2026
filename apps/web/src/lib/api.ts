@@ -102,6 +102,35 @@ export interface MunicipiosPresidenteResponse {
   municipios: MunicipioPresidenteResumo[];
 }
 
+/** Progresso por UF dentro do snapshot nacional. */
+export interface MunicipiosPresidentePorUf {
+  total: number;
+  coletados: number;
+  atualizadoEm: string | null;
+}
+
+/**
+ * Snapshot nacional compacto do mapa do 2º turno. Cada município é uma tupla
+ * `[cdi, uf, votosA, votosB]`; o servidor já monta e cacheia o payload.
+ */
+export interface MunicipiosPresidenteBrasilResponse {
+  eleicao: number;
+  cargo: number;
+  candidatos: [string, string];
+  total: number;
+  coletados: number;
+  preparando: boolean;
+  revisao: number;
+  ciclos: number;
+  /** false antes da liberação hardcoded (domingo, 25/10, 16h). */
+  liberado?: boolean;
+  /** true quando a coleta municipal está desligada no collector. */
+  desabilitado?: boolean;
+  atualizadoEm: string | null;
+  porUf: Record<string, MunicipiosPresidentePorUf>;
+  municipios: Array<[string, string, number, number]>;
+}
+
 export interface ConfigResponse {
   eleicao: EleicoesResolvidas;
   ufs: Uf[];
@@ -147,6 +176,14 @@ export const api = {
     signal?: AbortSignal,
   ) =>
     getJson<MunicipiosPresidenteResponse>(
+      `/api/presidente/municipios${qs(params)}`,
+      signal,
+    ),
+  presidenteMunicipiosBrasil: (
+    params: { eleicao: number; a: string; b: string },
+    signal?: AbortSignal,
+  ) =>
+    getJson<MunicipiosPresidenteBrasilResponse>(
       `/api/presidente/municipios${qs(params)}`,
       signal,
     ),

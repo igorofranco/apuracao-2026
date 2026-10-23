@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CandidateResult, RaceResult } from "@apuracao/domain";
 import {
+  CANDIDATOS_PRESIDENCIA_2026,
   disputaPresidencial,
+  disputaPresidencialComFallback,
   origemSegundoTurnoCandidato,
   segundoTurnoDaCorrida,
   temSegundoTurno,
@@ -144,6 +146,35 @@ describe("disputaPresidencial", () => {
     const r = race(1, [cand("1"), cand("2"), cand("3")]);
     expect(disputaPresidencial(r)).toBeNull();
     expect(disputaPresidencial(null)).toBeNull();
+  });
+});
+
+describe("disputaPresidencialComFallback", () => {
+  it("mostra a dupla do 2º turno mesmo sem corrida publicada", () => {
+    const disputa = disputaPresidencialComFallback(null, 2);
+    expect(disputa?.origem).toBe("aguardando");
+    expect(disputa?.candidatos).toHaveLength(2);
+    expect(disputa?.candidatos.map((c) => c.numero)).toEqual(["22", "13"]);
+    expect(disputa?.candidatos.map((c) => c.nomeUrna)).toEqual([
+      "FLAVIO BOLSONARO",
+      "LULA",
+    ]);
+    expect(disputa?.candidatos.every((c) => c.sqcand)).toBe(true);
+    expect(
+      disputa?.candidatos.every((c) => c.votos === 0 && c.percentual === 0),
+    ).toBe(true);
+  });
+
+  it("não usa o fallback no 1º turno", () => {
+    expect(disputaPresidencialComFallback(null, 1)).toBeNull();
+  });
+
+  it("prefere a corrida real quando ela já tem os dois candidatos", () => {
+    const real = race(1, [cand("13", { votos: 60 }), cand("22", { votos: 50 })]);
+    const disputa = disputaPresidencialComFallback(real, 2);
+    expect(disputa?.origem).toBe("oficial");
+    expect(disputa?.candidatos.map((c) => c.numero)).toEqual(["13", "22"]);
+    expect(disputa?.candidatos).not.toBe(CANDIDATOS_PRESIDENCIA_2026);
   });
 });
 

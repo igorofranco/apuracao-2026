@@ -55,7 +55,36 @@ async function main(): Promise<void> {
   }
 
   const targets = buildTargets(eleicoes);
-  const poller = new Poller({ client, store, targets, eleicoes, config, log });
+  const alvosRapidos = targets.filter((t) => t.grupo === "rapida");
+  const alvosLentos = targets.filter((t) => t.grupo === "lenta");
+  // Cartões nacionais (Presidente BR) a cada 15 s; mapa por UF, governadores e
+  // cargos decididos a cada 60 s. Duas cadências independentes evitam gastar
+  // requisições com dados que mudam pouco.
+  const poller = new Poller({
+    client,
+    store,
+    targets: alvosRapidos,
+    eleicoes,
+    config,
+    log,
+    nome: "rapido",
+  });
+  const pollerLento = new Poller({
+    client,
+    store,
+    targets: alvosLentos,
+    eleicoes,
+    log,
+    nome: "lento",
+    config: {
+      ...config,
+      poll: {
+        ...config.poll,
+        activeMs: config.poll.slowMs,
+        idleMs: config.poll.slowIdleMs,
+      },
+    },
+  });
   const municipios = new MunicipiosCache(client, eleicoes.ciclo);
   const localidades = new LocalidadesCache(client, 15_000);
   const municipiosPresidente = new MunicipiosPresidente({
@@ -63,6 +92,7 @@ async function main(): Promise<void> {
     municipios,
     eleicoes,
     log,
+    workers: config.municipios.workers,
     intervalMs: config.municipios.intervalMs,
     refreshMs: config.municipios.refreshMs,
     once: config.poll.mode === "once",
@@ -79,6 +109,7 @@ async function main(): Promise<void> {
     config,
     store,
     poller,
+    pollerLento,
     client,
     municipios,
     localidades,
@@ -93,6 +124,8 @@ async function main(): Promise<void> {
     host: config.host,
     porta: config.port,
     alvos: targets.length,
+    alvosRapidos: alvosRapidos.length,
+    alvosLentos: alvosLentos.length,
     jws: config.tse.verifyJws,
     ciclo: eleicoes.ciclo,
     federal: eleicoes.federal.cd,
@@ -100,23 +133,34 @@ async function main(): Promise<void> {
   });
 
   const iniciarColeta = () => {
-    // Coleta principal: no modo `once` faz uma única rodada e para; caso
-    // contrário, polling contínuo normal.
+    // No modo `once` cada cadência faz uma única rodada e para; caso contrário,
+    // polling contínuo normal.
     if (config.poll.mode === "once") {
       log.info("polling em modo once: uma rodada e para");
-      void poller.runOnce().catch((err) => {
-        log.warn("rodada única falhou", {
-          erro: err instanceof Error ? err.message : String(err),
-        });
-      });
+      void Promise.allSettled([poller.runOnce(), pollerLento.runOnce()]).then(
+        (resultados) => {
+          for (const r of resultados) {
+            if (r.status === "rejected") {
+              log.warn("rodada única falhou", {
+                erro:
+                  r.reason instanceof Error
+                    ? r.reason.message
+                    : String(r.reason),
+              });
+            }
+          }
+        },
+      );
     } else {
       poller.start();
+      pollerLento.start();
     }
 
     // Coleta municipal do 2º turno: gradual, em segundo plano, para o mapa por
     // município. No modo `once` faz uma única varredura e para.
     if (config.municipios.enabled && eleicoes.federal.turno > 1) {
       log.info("coleta municipal do 2º turno habilitada", {
+        workers: config.municipios.workers,
         intervaloMs: config.municipios.intervalMs,
         refreshMs: config.municipios.refreshMs,
         modo: config.poll.mode,
@@ -176,6 +220,7 @@ async function main(): Promise<void> {
     log.info("encerrando", { sinal: signal });
     if (inicioTimer) clearTimeout(inicioTimer);
     poller.stop();
+    pollerLento.stop();
     municipiosPresidente.parar();
     if (pruneTimer) clearInterval(pruneTimer);
     await server.close();

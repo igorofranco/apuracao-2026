@@ -6,10 +6,12 @@ import { Progress, Segmented, Skeleton } from "@/components/ui";
 import {
   MAPA_VIEW,
   useBrasilGeo,
+  useBrasilMunicipiosGeo,
   useMunicipiosProjetados,
 } from "@/lib/geo";
 import {
   COR_NEUTRA,
+  agruparMunicipiosPorCor,
   corMapaPresidente,
   percentualEntreDois,
   posicaoAbsoluta,
@@ -17,9 +19,10 @@ import {
   type CandidatoMapa,
   type EstadoMapa,
   type ModoCores,
+  type MunicipioMapa,
 } from "@/lib/mapa";
 import { formatDateTime, formatInt, formatPercent } from "@/lib/format";
-import { useMunicipiosPresidente } from "@/lib/queries";
+import { useMunicipiosPresidenteBrasil } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 type Escala = "relativo" | "absoluto";
@@ -33,14 +36,15 @@ interface Regiao {
 }
 
 /**
- * Mapa do Brasil com o heatmap do 2º turno presidencial: cada estado é pintado
- * no gradiente entre os dois candidatos (B em azul, A em vermelho).
+ * Mapa do Brasil com o heatmap do 2º turno presidencial.
  *
- * Clicar num estado abre os municípios daquela UF no mesmo card. A coleta
- * municipal roda no servidor, aos poucos; o mapa se completa sozinho.
+ * Na visão do Brasil inteiro, os municípios aparecem coloridos pela própria
+ * votação (sem hover/clique e sem divisas internas); os estados ficam por cima,
+ * com borda grossa e clique para abrir a UF. Na UF, o mapa detalhado mantém o
+ * hover e a malha municipal completa.
  *
  * - `relativo` (padrão): normaliza entre o extremo mais favorável a A e o mais
- *   favorável a B (do país ou da UF selecionada).
+ *   favorável a B (do país na visão Brasil; da UF no drill-down).
  * - `absoluto`: usa a diferença real entre os dois candidatos; o empate fica no
  *   centro e só 100% de um candidato chega à ponta.
  */
@@ -67,6 +71,7 @@ export function MapaPresidente({
   const [escala, setEscala] = useState<Escala>("relativo");
   const [modoCores, setModoCores] = useState<ModoCores>("neutro");
   const [ufSelecionada, setUfSelecionada] = useState<string | null>(null);
+  const [focoUf, setFocoUf] = useState<string | null>(null);
   const [hover, setHover] = useState<{
     x: number;
     y: number;
@@ -75,54 +80,133 @@ export function MapaPresidente({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const pathsEstados = useBrasilGeo();
+  const brasilMunicipiosGeo = useBrasilMunicipiosGeo();
   const municipiosGeo = useMunicipiosProjetados(ufSelecionada);
-  const municipiosQuery = useMunicipiosPresidente({
+  const municipiosQuery = useMunicipiosPresidenteBrasil({
     eleicao,
-    uf: ufSelecionada,
+    a: candidatoA.numero,
+    b: candidatoB.numero,
   });
   const ufInfo = ufSelecionada ? getUf(ufSelecionada) : null;
-  const nomeUf = ufInfo?.nome ?? (ufSelecionada ? ufSelecionada.toUpperCase() : null);
+  const nomeUf =
+    ufInfo?.nome ?? (ufSelecionada ? ufSelecionada.toUpperCase() : null);
 
-  const regioes = useMemo<Regiao[]>(() => {
-    if (!ufSelecionada) {
-      return estados.map((e) => ({
+  /** Votação dos dois candidatos por código IBGE (payload nacional único). */
+  const dadosPorCdi = useMemo(() => {
+    const mapa = new Map<string, { votosA: number; votosB: number }>();
+    for (const [cdi, , votosA, votosB] of
+      municipiosQuery.data?.municipios ?? []) {
+      mapa.set(cdi, { votosA, votosB });
+    }
+    return mapa;
+  }, [municipiosQuery.data]);
+
+  /* ------------------------- Escala dos estados ------------------------- */
+
+  const estadosRegioes = useMemo<Regiao[]>(
+    () =>
+      estados.map((e) => ({
         id: e.uf,
         nome: getUf(e.uf)?.nome ?? e.uf.toUpperCase(),
         votosA: e.votosA,
         votosB: e.votosB,
-      }));
+      })),
+    [estados],
+  );
+  const estadosPorId = useMemo(
+    () => new Map(estadosRegioes.map((r) => [r.id, r])),
+    [estadosRegioes],
+  );
+  const estadosComVotos = useMemo(
+    () => estadosRegioes.filter((r) => r.votosA + r.votosB > 0),
+    [estadosRegioes],
+  );
+  const estadosPosicoes = useMemo(() => {
+    if (escala === "absoluto") {
+      return new Map(
+        estadosComVotos.map((r) => [
+          r.id,
+          posicaoAbsoluta(r.votosA, r.votosB),
+        ]),
+      );
     }
+    const percentuais = estadosComVotos.map(
+      (r) => percentualEntreDois(r.votosA, r.votosB) ?? 0,
+    );
+    const valores = posicoesRelativas(percentuais);
+    return new Map(
+      estadosComVotos.map((r, i) => [r.id, valores[i] ?? 0]),
+    );
+  }, [escala, estadosComVotos]);
+  const corEstado = (regiao: Regiao): string => {
+    if (regiao.votosA + regiao.votosB <= 0) return COR_NEUTRA;
+    return corMapaPresidente(
+      estadosPosicoes.get(regiao.id) ?? 0,
+      candidatoA.cor,
+      candidatoB.cor,
+      modoCores,
+    );
+  };
 
-    const dados = municipiosQuery.data?.municipios ?? [];
-    const porCdi = new Map<string, (typeof dados)[number]>();
-    for (const m of dados) {
-      if (m.cdi) porCdi.set(m.cdi, m);
-    }
-    return municipiosGeo.paths.map((p) => {
-      const municipio = porCdi.get(p.id);
+  /* --------------------- Escala dos municípios (visão) ------------------- */
+
+  const municipiosBrasil = useMemo<MunicipioMapa[]>(
+    () =>
+      brasilMunicipiosGeo.municipios
+        // 38 features vêm com MultiPolygon vazio na fonte: não há o que pintar.
+        .filter((m) => m.d)
+        .map((m) => {
+          const dados = dadosPorCdi.get(m.id);
+          return {
+            id: m.id,
+            d: m.d,
+            votosA: dados?.votosA ?? 0,
+            votosB: dados?.votosB ?? 0,
+          };
+        }),
+    [brasilMunicipiosGeo.municipios, dadosPorCdi],
+  );
+  const regioesBrasil = useMemo<Regiao[]>(
+    () =>
+      municipiosBrasil.map((m) => ({
+        id: m.id,
+        nome: "",
+        votosA: m.votosA,
+        votosB: m.votosB,
+      })),
+    [municipiosBrasil],
+  );
+  const municipiosComVotos = useMemo(
+    () => regioesBrasil.filter((r) => r.votosA + r.votosB > 0),
+    [regioesBrasil],
+  );
+  const regioesUf = useMemo<Regiao[]>(() => {
+    if (!ufSelecionada) return [];
+    return municipiosGeo.paths.map((municipio) => {
+      const dados = dadosPorCdi.get(municipio.id);
       return {
-        id: p.id,
-        nome: p.nome,
-        votosA: municipio?.votos[candidatoA.numero] ?? 0,
-        votosB: municipio?.votos[candidatoB.numero] ?? 0,
+        id: municipio.id,
+        nome: municipio.nome,
+        votosA: dados?.votosA ?? 0,
+        votosB: dados?.votosB ?? 0,
       };
     });
-  }, [
-    ufSelecionada,
-    estados,
-    municipiosQuery.data,
-    municipiosGeo.paths,
-    candidatoA.numero,
-    candidatoB.numero,
-  ]);
-
-  const porId = useMemo(
-    () => new Map(regioes.map((r) => [r.id, r])),
-    [regioes],
+  }, [ufSelecionada, municipiosGeo.paths, dadosPorCdi]);
+  const porIdUf = useMemo(
+    () => new Map(regioesUf.map((r) => [r.id, r])),
+    [regioesUf],
   );
+
+  const usandoMunicipios =
+    Boolean(ufSelecionada) || municipiosComVotos.length > 0;
+  const regioesEscala = ufSelecionada
+    ? regioesUf
+    : usandoMunicipios
+      ? regioesBrasil
+      : estadosRegioes;
   const comVotos = useMemo(
-    () => regioes.filter((r) => r.votosA + r.votosB > 0),
-    [regioes],
+    () => regioesEscala.filter((r) => r.votosA + r.votosB > 0),
+    [regioesEscala],
   );
   const temDados = comVotos.length > 0;
 
@@ -130,10 +214,11 @@ export function MapaPresidente({
     () => comVotos.map((r) => percentualEntreDois(r.votosA, r.votosB) ?? 0),
     [comVotos],
   );
-
   const relativas = useMemo(() => {
     const valores = posicoesRelativas(percentuais);
-    return new Map(comVotos.map((r, i) => [r.id, valores[i] ?? 0]));
+    return new Map(
+      comVotos.map((r, i) => [r.id, valores[i] ?? 0]),
+    );
   }, [comVotos, percentuais]);
 
   const minPercentual = percentuais.length ? Math.min(...percentuais) : null;
@@ -154,43 +239,90 @@ export function MapaPresidente({
     );
   };
 
+  /* --------------------- Camadas municipais do Brasil ------------------- */
+
+  const posicoesBrasil = useMemo(() => {
+    if (ufSelecionada) return new Map<string, number>();
+    if (escala === "relativo") return relativas;
+    return new Map(
+      municipiosComVotos.map((r) => [
+        r.id,
+        posicaoAbsoluta(r.votosA, r.votosB),
+      ]),
+    );
+  }, [ufSelecionada, escala, relativas, municipiosComVotos]);
+
+  const camadasBrasil = useMemo(() => {
+    if (ufSelecionada || !brasilMunicipiosGeo.carregado) return [];
+    return agruparMunicipiosPorCor(
+      municipiosBrasil,
+      posicoesBrasil,
+      candidatoA.cor,
+      candidatoB.cor,
+      modoCores,
+    );
+  }, [
+    ufSelecionada,
+    brasilMunicipiosGeo.carregado,
+    municipiosBrasil,
+    posicoesBrasil,
+    candidatoA.cor,
+    candidatoB.cor,
+    modoCores,
+  ]);
+  const municipiosDesenhados = useMemo(
+    () => camadasBrasil.reduce((total, camada) => total + camada.municipios, 0),
+    [camadasBrasil],
+  );
+
   const vitoriasA = comVotos.filter((r) => r.votosA > r.votosB).length;
   const vitoriasB = comVotos.filter((r) => r.votosB > r.votosA).length;
   const empates = comVotos.length - vitoriasA - vitoriasB;
 
+  /* -------------------------- Coleta no servidor ------------------------ */
+
   const coleta = municipiosQuery.data;
-  const coletaDesabilitada = Boolean(ufSelecionada && coleta?.desabilitado);
-  const erroColeta = Boolean(ufSelecionada && municipiosQuery.isError);
+  const porUf = ufSelecionada ? coleta?.porUf[ufSelecionada] : undefined;
+  const totalColeta = ufSelecionada ? (porUf?.total ?? 0) : (coleta?.total ?? 0);
+  const coletadosColeta = ufSelecionada
+    ? (porUf?.coletados ?? 0)
+    : (coleta?.coletados ?? 0);
+  const atualizadoColeta = ufSelecionada
+    ? (porUf?.atualizadoEm ?? null)
+    : (coleta?.atualizadoEm ?? null);
+  const aguardandoLiberacao = coleta?.liberado === false;
+  const coletaDesabilitada = Boolean(coleta?.desabilitado);
+  const erroColeta = municipiosQuery.isError;
   const coletando = Boolean(
-    ufSelecionada &&
+    !aguardandoLiberacao &&
       !coletaDesabilitada &&
       !erroColeta &&
-      (municipiosQuery.isLoading ||
-        (coleta &&
-          (coleta.preparando || coleta.coletados < coleta.total))),
+      (coleta?.preparando ||
+        (totalColeta > 0 && coletadosColeta < totalColeta)),
   );
-  const coletandoSemDados = coletando && !temDados;
+  const coletandoSemDados = Boolean(
+    ufSelecionada && coletando && !temDados,
+  );
   const geometriaCarregando = Boolean(
     ufSelecionada && municipiosGeo.paths.length === 0,
   );
   const carregandoMapa = ufSelecionada ? geometriaCarregando : carregando;
   const progresso =
-    coleta && coleta.total > 0
-      ? Math.min(100, (coleta.coletados / coleta.total) * 100)
+    totalColeta > 0
+      ? Math.min(100, (coletadosColeta / totalColeta) * 100)
       : 0;
 
   const abrirUf = (uf: string) => {
     setUfSelecionada(uf);
+    setFocoUf(null);
     setHover(null);
   };
   const voltarAoBrasil = () => {
     setUfSelecionada(null);
+    setFocoUf(null);
     setHover(null);
   };
-  const mover = (
-    event: MouseEvent,
-    regiao: Regiao | undefined,
-  ) => {
+  const mover = (event: MouseEvent, regiao: Regiao | undefined) => {
     if (!regiao || regiao.votosA + regiao.votosB <= 0) return;
     const rect = containerRef.current?.getBoundingClientRect();
     setHover({
@@ -200,7 +332,7 @@ export function MapaPresidente({
     });
   };
 
-  const unidade = ufSelecionada ? "município" : "estado";
+  const unidade = usandoMunicipios ? "município" : "estado";
   const local = ufSelecionada ? ` de ${nomeUf}` : "";
   const onde = ufSelecionada ? `de ${nomeUf}` : "do país";
 
@@ -236,13 +368,16 @@ export function MapaPresidente({
               <span className="font-medium">{nomeUf}</span>
             </nav>
           ) : null}
-          <h2 id="mapa-presidente-titulo" className="text-lg font-semibold sm:text-xl">
+          <h2
+            id="mapa-presidente-titulo"
+            className="text-lg font-semibold sm:text-xl"
+          >
             Mapa do 2º turno
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             {ufSelecionada
               ? `Quem teve mais votos em cada município de ${nomeUf}, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}.`
-              : `Quem teve mais votos em cada estado, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}. Clique em um estado para ver os municípios.`}
+              : `Quem teve mais votos em cada município, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}. Clique em um estado para detalhar.`}
           </p>
         </div>
         <Segmented
@@ -270,7 +405,7 @@ export function MapaPresidente({
               aria-label={`Mapa dos municípios de ${nomeUf} na votação do 2º turno`}
             >
               {municipiosGeo.paths.map((municipio) => {
-                const regiao = porId.get(municipio.id);
+                const regiao = porIdUf.get(municipio.id);
                 if (!regiao) return null;
                 const pctA = percentualEntreDois(
                   regiao.votosA,
@@ -328,51 +463,122 @@ export function MapaPresidente({
               viewBox={`0 0 ${MAPA_VIEW} ${MAPA_VIEW}`}
               className="block h-auto w-full"
               role="group"
-              aria-label="Mapa do Brasil com a votação de cada estado no 2º turno"
+              aria-label="Mapa do Brasil com a votação de cada município no 2º turno; os estados são clicáveis para detalhar"
             >
-              {pathsEstados.map(({ uf, d }) => {
-                if (!uf) {
+              {/* Base: cor do estado, visível nos municípios ainda sem dados. */}
+              <g
+                data-testid="mapa-estados-base"
+                opacity={municipiosDesenhados > 0 ? 0.55 : 1}
+              >
+                {pathsEstados.map(({ uf, d }) => {
+                  if (!uf) {
+                    return (
+                      <path
+                        key={d.slice(0, 12)}
+                        d={d}
+                        fill="var(--muted)"
+                        stroke="var(--background)"
+                        strokeWidth={1.2}
+                      />
+                    );
+                  }
+                  const regiao = estadosPorId.get(uf);
+                  if (!regiao) return null;
                   return (
                     <path
-                      key={d.slice(0, 12)}
+                      key={uf}
+                      data-testid={`mapa-estado-base-${uf}`}
                       d={d}
-                      fill="var(--muted)"
+                      fill={corEstado(regiao)}
                       stroke="var(--background)"
                       strokeWidth={1.2}
                     />
                   );
-                }
-                const regiao = porId.get(uf);
-                if (!regiao) return null;
-                return (
-                  <g
-                    key={uf}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Ver os municípios de ${regiao.nome}`}
-                    data-testid={`mapa-estado-${uf}`}
-                    data-votos={regiao.votosA + regiao.votosB}
-                    className="cursor-pointer focus-visible:opacity-70 focus-visible:outline-none"
-                    onClick={() => abrirUf(uf)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        abrirUf(uf);
-                      }
-                    }}
-                    onMouseMove={(e) => mover(e, regiao)}
-                    onMouseLeave={() => setHover(null)}
-                  >
+                })}
+              </g>
+
+              {/* Municípios do Brasil: sem hover/clique e sem divisas. */}
+              {brasilMunicipiosGeo.carregado ? (
+                <g
+                  data-testid="mapa-municipios-brasil"
+                  data-municipios={municipiosDesenhados}
+                  pointerEvents="none"
+                  aria-hidden="true"
+                >
+                  {camadasBrasil.map((camada) => (
                     <path
-                      d={d}
-                      fill={cor(regiao)}
-                      stroke="var(--background)"
-                      strokeWidth={1.2}
-                      className="transition-opacity hover:opacity-80"
+                      key={camada.cor}
+                      d={camada.d}
+                      fill={camada.cor}
+                      stroke={camada.cor}
+                      strokeWidth={0.25}
+                      strokeLinejoin="round"
                     />
-                  </g>
-                );
-              })}
+                  ))}
+                </g>
+              ) : null}
+
+              {/* Bordas dos estados por cima dos municípios + realce do hover. */}
+              <g data-testid="mapa-estados-bordas" pointerEvents="none">
+                {pathsEstados.map(({ uf, d }) => {
+                  if (!uf) return null;
+                  const destacado =
+                    !ufSelecionada &&
+                    (hover?.regiao.id === uf || focoUf === uf);
+                  return (
+                    <g key={uf}>
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="var(--background)"
+                        strokeWidth={1.5}
+                        strokeLinejoin="round"
+                      />
+                      {destacado ? (
+                        <path
+                          d={d}
+                          fill="var(--foreground)"
+                          fillOpacity={0.06}
+                        />
+                      ) : null}
+                    </g>
+                  );
+                })}
+              </g>
+
+              {/* Interação dos estados por cima de tudo: um alvo transparente
+                  por UF, sem cobrir as cores dos municípios. */}
+              <g data-testid="mapa-estados-interacao">
+                {pathsEstados.map(({ uf, d }) => {
+                  if (!uf) return null;
+                  const regiao = estadosPorId.get(uf);
+                  if (!regiao) return null;
+                  return (
+                    <g
+                      key={uf}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Ver os municípios de ${regiao.nome}`}
+                      data-testid={`mapa-estado-${uf}`}
+                      data-votos={regiao.votosA + regiao.votosB}
+                      className="cursor-pointer focus-visible:outline-none"
+                      onClick={() => abrirUf(uf)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          abrirUf(uf);
+                        }
+                      }}
+                      onFocus={() => setFocoUf(uf)}
+                      onBlur={() => setFocoUf(null)}
+                      onMouseMove={(e) => mover(e, regiao)}
+                      onMouseLeave={() => setHover(null)}
+                    >
+                      <path d={d} fill="transparent" pointerEvents="all" />
+                    </g>
+                  );
+                })}
+              </g>
             </svg>
           )}
 
@@ -426,7 +632,7 @@ export function MapaPresidente({
               </div>
               {!ufSelecionada ? (
                 <div className="mt-1 text-[10px] text-muted-foreground">
-                  Clique para ver os municípios
+                  Clique para abrir a UF
                 </div>
               ) : null}
             </div>
@@ -437,8 +643,8 @@ export function MapaPresidente({
               <div className="max-w-xs rounded-xl border border-border bg-card/95 px-4 py-3 text-center shadow-sm backdrop-blur">
                 <p className="text-sm font-medium">Coletando municípios…</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {coleta?.coletados ?? 0} de {coleta?.total ?? 0} · roda no
-                  servidor, aos poucos
+                  {coletadosColeta} de {totalColeta} · roda no servidor, aos
+                  poucos
                 </p>
               </div>
             </div>
@@ -460,13 +666,13 @@ export function MapaPresidente({
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {ufSelecionada
                     ? "O mapa dos municípios é colorido assim que o TSE publicar a apuração."
-                    : "O mapa é colorido assim que o TSE publicar a apuração por estado."}
+                    : "O mapa é colorido assim que o TSE publicar a apuração por município."}
                 </p>
               </div>
             </div>
           ) : null}
 
-          {!carregandoMapa && !temDados && coletaDesabilitada ? (
+          {!carregandoMapa && !temDados && ufSelecionada && coletaDesabilitada ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="max-w-xs rounded-xl border border-border bg-card/95 px-4 py-3 text-center shadow-sm backdrop-blur">
                 <p className="text-sm font-medium">
@@ -537,8 +743,8 @@ export function MapaPresidente({
                     : "Coletando municípios"}
                 </span>
                 <span className="tabular">
-                  {coleta?.total
-                    ? `${coleta.coletados} / ${coleta.total}`
+                  {totalColeta
+                    ? `${coletadosColeta} / ${totalColeta}`
                     : "—"}
                 </span>
               </div>
@@ -621,9 +827,14 @@ export function MapaPresidente({
                 ? " O gradiente vai direto do azul ao vermelho, sem cor neutra no meio."
                 : null}
             </p>
-            {ufSelecionada && coleta?.atualizadoEm ? (
+            {!ufSelecionada && usandoMunicipios ? (
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Dados do TSE de {formatDateTime(coleta.atualizadoEm)}
+                Municípios ainda sem dados aparecem com a cor do estado.
+              </p>
+            ) : null}
+            {atualizadoColeta ? (
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Dados do TSE de {formatDateTime(atualizadoColeta)}
               </p>
             ) : null}
           </div>
@@ -648,13 +859,15 @@ export function MapaPresidente({
             </p>
           ) : (
             <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-              {coletando
-                ? "Coleta dos municípios em andamento."
-                : coletaDesabilitada
-                  ? "Coleta municipal desabilitada no servidor."
-                  : erroColeta
-                    ? "Não foi possível carregar os municípios agora."
-                    : "Nenhum voto computado no 2º turno ainda."}
+              {aguardandoLiberacao
+                ? "A coleta do 2º turno começa em 25/10 às 16h (Brasília)."
+                : coletando
+                  ? "Coleta dos municípios em andamento."
+                  : coletaDesabilitada
+                    ? "Coleta municipal desabilitada no servidor."
+                    : erroColeta
+                      ? "Não foi possível carregar os municípios agora."
+                      : "Nenhum voto computado no 2º turno ainda."}
             </p>
           )}
         </aside>

@@ -31,6 +31,29 @@ export function LiveProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const source = new EventSource(`${API_BASE}/api/live`);
+    // Numa rodada do poller lento chegam ~160 eventos quase juntos. Agrupar as
+    // invalidações evita uma rajada de refetches de /api/resumo e /historico.
+    let resumoHistorico: ReturnType<typeof setTimeout> | null = null;
+    let municipios: ReturnType<typeof setTimeout> | null = null;
+
+    const agendarResumoEHistorico = () => {
+      if (resumoHistorico) return;
+      resumoHistorico = setTimeout(() => {
+        resumoHistorico = null;
+        void queryClient.invalidateQueries({ queryKey: ["resumo"] });
+        void queryClient.invalidateQueries({ queryKey: ["historico"] });
+      }, 1_500);
+    };
+
+    const agendarMunicipios = () => {
+      if (municipios) return;
+      municipios = setTimeout(() => {
+        municipios = null;
+        void queryClient.invalidateQueries({
+          queryKey: ["presidente-municipios"],
+        });
+      }, 500);
+    };
 
     source.addEventListener("open", () => setStatus("conectado"));
     source.addEventListener("hello", () => setStatus("conectado"));
@@ -45,19 +68,24 @@ export function LiveProvider({ children }: { children: ReactNode }) {
           ["resultado", race.eleicao, race.cargo, race.uf, "", ""],
           race,
         );
-        void queryClient.invalidateQueries({ queryKey: ["resumo"] });
-        void queryClient.invalidateQueries({
-          queryKey: ["historico", race.eleicao, race.cargo, race.uf],
-        });
+        agendarResumoEHistorico();
         setLastEventAt(payload.at);
         setStatus("conectado");
       } catch {
         // ignora payload malformado
       }
     });
+    source.addEventListener("municipios", () => {
+      agendarMunicipios();
+      setStatus("conectado");
+    });
     source.onerror = () => setStatus("desconectado");
 
-    return () => source.close();
+    return () => {
+      source.close();
+      if (resumoHistorico) clearTimeout(resumoHistorico);
+      if (municipios) clearTimeout(municipios);
+    };
   }, [queryClient]);
 
   const value = useMemo(() => ({ status, lastEventAt }), [status, lastEventAt]);

@@ -149,7 +149,12 @@ function ehRunoff(eleicao, cargo) {
  * do 2º turno de 2022). Desligado por padrão, para os testes refletirem o
  * cenário real de 2026 — arquivo 6258 publicado com 0 voto.
  */
-const SIMULAR_VOTOS = process.env.MOCK_RUNOFF_VOTOS === "1";
+const SIMULAR_POR_ENV = process.env.MOCK_RUNOFF_VOTOS === "1";
+/**
+ * Também pode ser ligado por request com o cookie `mock_municipios=1`, para um
+ * teste E2E ver o mapa colorido sem mudar o cenário dos demais testes.
+ */
+let SIMULAR_VOTOS = SIMULAR_POR_ENV;
 
 /** [% de Lula no 2º turno de 2022, eleitorado aproximado em milhões]. */
 const CENARIO_PRESIDENTE = {
@@ -202,12 +207,28 @@ function municipiosGeo(uf) {
   return json;
 }
 
+/** Todas as features municipais, na ordem das UFs (cache do mock). */
+let BRASIL_MUNICIPIOS = null;
+function municipiosBrasilGeo() {
+  if (BRASIL_MUNICIPIOS) return BRASIL_MUNICIPIOS;
+  const lista = [];
+  for (const u of UFS) {
+    const geo = municipiosGeo(u.uf);
+    if (!geo) continue;
+    for (const feature of geo.features) {
+      lista.push({ uf: u.uf, feature });
+    }
+  }
+  BRASIL_MUNICIPIOS = lista;
+  return lista;
+}
+
 /**
  * Votação simulada de um município: parte do percentual estadual e aplica uma
  * variação determinística por município, para o mapa ganhar textura.
  */
-function votosMunicipioPresidente(uf, cdi) {
-  if (!SIMULAR_VOTOS) {
+function votosMunicipioPresidente(uf, cdi, simular = SIMULAR_VOTOS) {
+  if (!simular) {
     return { votos: { "13": 0, "22": 0 }, votosValidos: 0 };
   }
   const base = CENARIO_PRESIDENTE[uf]?.[0] ?? 50;
@@ -649,6 +670,9 @@ function json(res, status, body) {
 const RESULTADO_MEMO = new Map();
 
 const server = createServer((req, res) => {
+  SIMULAR_VOTOS =
+    SIMULAR_POR_ENV ||
+    (req.headers.cookie ?? "").includes("mock_municipios=1");
   const url = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
   const path = url.pathname;
   const q = url.searchParams;
@@ -669,6 +693,14 @@ const server = createServer((req, res) => {
     const eleicao = Number(q.get("eleicao") ?? 6257);
     const cargo = Number(q.get("cargo") ?? 1);
     const uf = (q.get("uf") ?? "").toLowerCase() || (cargo === 1 ? "br" : "sp");
+    // Simula o painel antes de o TSE publicar a corrida nacional (fallback da
+    // dupla do 2º turno no destaque presidencial e no mapa).
+    if (
+      (req.headers.cookie ?? "").includes("mock_sem_resultado=1") &&
+      uf === "br"
+    ) {
+      return json(res, 404, { error: "sem resultado publicado" });
+    }
     const municipio = q.get("municipio") ?? undefined;
     const zona = q.get("zona") ?? undefined;
     const chave = `${eleicao}:${cargo}:${uf}:${municipio ?? ""}:${zona ?? ""}`;
@@ -695,19 +727,57 @@ const server = createServer((req, res) => {
   if (path === "/api/presidente/municipios") {
     const eleicao = Number(q.get("eleicao") ?? 6258);
     const uf = (q.get("uf") ?? "").toLowerCase();
-    const geo = uf ? municipiosGeo(uf) : null;
+    const simular =
+      SIMULAR_VOTOS ||
+      (req.headers.cookie ?? "").includes("mock_municipios=1");
+    const atualizadoEm = simular
+      ? "2026-10-25T19:42:00-03:00"
+      : "2026-10-15T09:38:00-03:00";
+
+    if (!uf) {
+      const a = q.get("a") ?? "13";
+      const b = q.get("b") ?? "22";
+      const municipios = [];
+      const porUf = {};
+      for (const { uf: sigla, feature } of municipiosBrasilGeo()) {
+        const cdi = String(feature.properties.id);
+        const { votos } = votosMunicipioPresidente(sigla, cdi, simular);
+        municipios.push([cdi, sigla, votos[a] ?? 0, votos[b] ?? 0]);
+        const progresso = (porUf[sigla] ??= {
+          total: 0,
+          coletados: 0,
+          atualizadoEm,
+        });
+        progresso.total += 1;
+        progresso.coletados += 1;
+      }
+      return json(res, 200, {
+        eleicao,
+        cargo: 1,
+        candidatos: [a, b],
+        total: municipios.length,
+        coletados: municipios.length,
+        preparando: false,
+        revisao: simular ? 2 : 1,
+        ciclos: 1,
+        liberado: true,
+        desabilitado: false,
+        atualizadoEm,
+        porUf,
+        municipios,
+      });
+    }
+
+    const geo = municipiosGeo(uf);
     if (!geo) {
       return json(res, 404, { error: "malha municipal indisponível", uf });
     }
-    const atualizadoEm = SIMULAR_VOTOS
-      ? "2026-10-25T19:42:00-03:00"
-      : "2026-10-15T09:38:00-03:00";
     const municipios = geo.features.map((f) => ({
       cd: String(f.properties.id),
       cdi: String(f.properties.id),
       nome: String(f.properties.name ?? "").toUpperCase(),
       uf,
-      ...votosMunicipioPresidente(uf, f.properties.id),
+      ...votosMunicipioPresidente(uf, f.properties.id, simular),
       semDados: false,
       atualizadoEm,
     }));

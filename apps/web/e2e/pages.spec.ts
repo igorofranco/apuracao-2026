@@ -154,6 +154,18 @@ async function semOverflowHorizontal(page: Page): Promise<void> {
   ).toBeLessThanOrEqual(larguraVisivel + 1);
 }
 
+/**
+ * Espera a versão visível do mapa. O streaming do Next mantém por alguns ms
+ * uma cópia oculta do HTML do servidor; sem isso o locator fica ambíguo.
+ */
+async function abrirMapaPresidente(page: Page) {
+  const mapas = page.getByTestId("mapa-presidente");
+  await expect(mapas).toHaveCount(1, { timeout: 20_000 });
+  const mapa = mapas.first();
+  await expect(mapa).toBeVisible();
+  return mapa;
+}
+
 /** Garante que nenhum rótulo de eixo do Recharts seja cortado pelo SVG. */
 async function semRotulosCortados(page: Page): Promise<void> {
   const cortados = await page.$$eval(
@@ -309,12 +321,70 @@ test.describe("2º turno presidencial", () => {
     expect(erros, erros.join("\n")).toEqual([]);
   });
 
+  test("mostra fotos e nomes da dupla antes de o TSE publicar a corrida", async ({
+    page,
+    context,
+  }, testInfo) => {
+    const erros = monitorar(page, { permitir404: true });
+    // Simula o painel antes de o collector ter a corrida 6258: /api/resultado
+    // responde 404 para o Brasil.
+    await context.addCookies([
+      { name: "mock_sem_resultado", value: "1", url: "http://localhost:3000" },
+    ]);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const heroes = page.getByTestId("presidente-segundo-turno");
+    await expect(heroes).toHaveCount(1, { timeout: 20_000 });
+    const hero = heroes.first();
+    const cartoes = hero.getByTestId("candidato-destaque");
+    await expect(cartoes).toHaveCount(2);
+
+    // Identificação completa, mesmo sem votos.
+    await expect(hero.getByRole("heading", { name: "LULA" })).toBeVisible();
+    await expect(
+      hero.getByRole("heading", { name: "FLAVIO BOLSONARO" }),
+    ).toBeVisible();
+    await expect(hero.getByText("Luiz Inácio Lula da Silva")).toBeVisible();
+    await expect(hero.getByText("Flavio Nantes Bolsonaro")).toBeVisible();
+    await expect(
+      hero.getByText("Aguardando o início da apuração do 2º turno"),
+    ).toBeVisible();
+
+    // Sem inventar apuração: 0,0% / 0 voto e sem "1º lugar".
+    await expect(cartoes.getByText("0,0%")).toHaveCount(2);
+    await expect(cartoes.getByText("0", { exact: true })).toHaveCount(2);
+    await expect(hero.getByText("1º lugar")).toHaveCount(0);
+
+    // Fotos oficiais do TSE (por `sqcand`) carregaram de verdade.
+    const fotos = hero.getByTestId("foto-candidato");
+    await expect(fotos).toHaveCount(2);
+    for (const foto of await fotos.all()) {
+      await expect
+        .poll(() => foto.evaluate((img: HTMLImageElement) => img.naturalWidth))
+        .toBeGreaterThan(0);
+    }
+
+    // O mapa logo abaixo também aparece no estado de espera.
+    await abrirMapaPresidente(page);
+    await expect(page.getByTestId("mapa-presidente-vazio")).toBeVisible();
+
+    await page.waitForTimeout(500);
+    await semOverflowHorizontal(page);
+    const dir = `e2e/screenshots/${testInfo.project.name}`;
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({
+      path: `${dir}/segundo-turno-sem-corrida.png`,
+      fullPage: true,
+    });
+
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+
   test("mapa por estado fica neutro até haver votos no 2º turno", async ({ page }) => {
     const erros = monitorar(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    const mapa = page.getByTestId("mapa-presidente");
-    await expect(mapa).toBeVisible({ timeout: 20_000 });
+    const mapa = await abrirMapaPresidente(page);
     await expect(
       mapa.getByRole("heading", { name: "Mapa do 2º turno" }),
     ).toBeVisible();
@@ -327,10 +397,15 @@ test.describe("2º turno presidencial", () => {
 
     // Sem votos: mapa neutro + aviso de espera, sem inventar percentuais.
     await expect(mapa.getByTestId("mapa-presidente-vazio")).toBeVisible();
-    const spPath = mapa.locator('[data-testid="mapa-estado-sp"] path');
+    const spPath = mapa.getByTestId("mapa-estado-base-sp");
     await expect(spPath).toHaveAttribute("fill", "#e4e9f2");
     // Divisas entre UFs mais grossas que o padrão antigo (0.8).
     await expect(spPath).toHaveAttribute("stroke-width", "1.2");
+
+    // A malha municipal do Brasil é carregada, mas sem votos não pinta nada.
+    const camadaBrasil = mapa.getByTestId("mapa-municipios-brasil");
+    await expect(camadaBrasil).toHaveAttribute("data-municipios", "0");
+    await expect(camadaBrasil).toHaveAttribute("pointer-events", "none");
 
     // Relativo é o padrão; o switch alterna para absoluto.
     const relativo = mapa.getByRole("button", { name: "Relativo" });
@@ -365,8 +440,7 @@ test.describe("2º turno presidencial", () => {
     const erros = monitorar(page);
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    const mapa = page.getByTestId("mapa-presidente");
-    await expect(mapa).toBeVisible({ timeout: 20_000 });
+    const mapa = await abrirMapaPresidente(page);
     await expect(mapa.getByTestId("mapa-presidente-vazio")).toBeVisible();
 
     // Clique no estado abre o drill-down municipal no mesmo card.
@@ -405,6 +479,64 @@ test.describe("2º turno presidencial", () => {
     await mapa.getByRole("button", { name: "Brasil" }).click();
     await expect(mapa).toHaveAttribute("data-uf", "");
     await expect(mapa.getByTestId("mapa-presidente-vazio")).toBeVisible();
+
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+
+  test("visão Brasil mostra os municípios sem interação e mantém o clique no estado", async ({
+    page,
+    context,
+  }, testInfo) => {
+    const erros = monitorar(page);
+    // Liga a votação simulada só para esta página, sem afetar os demais testes.
+    await context.addCookies([
+      { name: "mock_municipios", value: "1", url: "http://localhost:3000" },
+    ]);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const mapa = await abrirMapaPresidente(page);
+
+    // A camada municipal do Brasil carrega e pinta milhares de municípios.
+    const camada = mapa.getByTestId("mapa-municipios-brasil");
+    await expect(camada).toBeVisible({ timeout: 20_000 });
+    await expect
+      .poll(
+        async () => Number(await camada.getAttribute("data-municipios")),
+        { timeout: 20_000 },
+      )
+      .toBeGreaterThan(5_000);
+    // Sem hover/clique e sem elementos individuais por município.
+    await expect(camada).toHaveAttribute("pointer-events", "none");
+    await expect(camada).toHaveAttribute("aria-hidden", "true");
+    await expect(mapa.locator('[data-testid^="mapa-municipio-"]')).toHaveCount(
+      0,
+    );
+
+    await mapa.scrollIntoViewIfNeeded();
+    const dir = `e2e/screenshots/${testInfo.project.name}`;
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({
+      path: `${dir}/mapa-municipios-brasil.png`,
+      fullPage: true,
+    });
+
+    // O estado continua com hover e clique.
+    await mapa.getByTestId("mapa-estado-sp").hover();
+    await expect(mapa.getByText("São Paulo")).toBeVisible();
+    await expect(mapa.getByText("Clique para abrir a UF")).toBeVisible();
+
+    await mapa.getByTestId("mapa-estado-sp").click();
+    await expect(mapa).toHaveAttribute("data-uf", "sp");
+    await expect(mapa.getByTestId("mapa-municipios")).toBeVisible();
+    await expect(
+      mapa.locator('[data-testid^="mapa-municipio-"]'),
+    ).toHaveCount(645);
+
+    // Volta ao Brasil: a camada municipal reaparece e não há aviso de vazio.
+    await mapa.getByRole("button", { name: "Brasil" }).click();
+    await expect(mapa).toHaveAttribute("data-uf", "");
+    await expect(mapa.getByTestId("mapa-municipios-brasil")).toBeVisible();
+    await expect(mapa.getByTestId("mapa-presidente-vazio")).toHaveCount(0);
 
     expect(erros, erros.join("\n")).toEqual([]);
   });

@@ -5,13 +5,17 @@ import { LiveBadge } from "@/components/live-badge";
 import { NumeroBadge } from "@/components/numero-badge";
 import { Progress, Skeleton } from "@/components/ui";
 import { formatCompact, formatData, formatDateTime, formatInt, formatPercent } from "@/lib/format";
-import { disputaPresidencial, type OrigemDisputa } from "@/lib/segundo-turno";
+import {
+  disputaPresidencialComFallback,
+  type OrigemDisputa,
+} from "@/lib/segundo-turno";
 import { cn } from "@/lib/utils";
 
 const ORIGEM_TEXTO: Record<OrigemDisputa, string> = {
   oficial: "Disputa de 2º turno confirmada pelo TSE",
   matematico: "2º turno definido pela apuração",
   apuracao: "Os dois mais votados até agora",
+  aguardando: "Aguardando o início da apuração do 2º turno",
 };
 
 /**
@@ -35,7 +39,7 @@ export function PresidenteSegundoTurno({
   mostrarLink?: boolean;
   className?: string;
 }) {
-  const disputa = disputaPresidencial(race);
+  const disputa = disputaPresidencialComFallback(race, turno);
   const dois = disputa?.candidatos ?? [];
   const totalizadas = race?.secoes.percentualTotalizadas ?? 0;
   const segundoTurno = turno > 1;
@@ -123,7 +127,7 @@ export function PresidenteSegundoTurno({
         )}
       </div>
 
-      {disputa && race ? (
+      {disputa ? (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 text-xs text-muted-foreground sm:mt-7">
           <span>
             {segundoTurno
