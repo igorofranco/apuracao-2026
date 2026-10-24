@@ -2,6 +2,9 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Celulares baixos (ex.: 667px de altura): compacta o que é secundário. */
+@custom-variant curta (@media (max-width: 639px) and (max-height: 700px));
+
 :root {
   --background: #f6f7fb;
   --foreground: #0b1220;
@@ -90,4 +93,14 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Home mobile em tela cheia (placar + mapa): o rodapé legal sairia da primeira
+ * tela e forçaria scroll. Ele continua visível nas demais páginas.
+ */
+@media (max-width: 639px) {
+  body:has([data-mobile-home]) footer {
+    display: none;
+  }
 }

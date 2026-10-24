@@ -434,11 +434,13 @@ export function MapaPresidente({
       data-uf={ufSelecionada ?? ""}
       className={cn(
         "rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6",
+        // Mobile: ocupa o restante da tela, com o mapa flexível no meio.
+        "max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col max-sm:p-3",
         className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 max-sm:shrink-0 max-sm:gap-x-2 max-sm:gap-y-1">
+        <div className="min-w-0 max-sm:flex-1">
           {ufSelecionada ? (
             <nav
               aria-label="Navegação do mapa"
@@ -459,20 +461,27 @@ export function MapaPresidente({
           ) : null}
           <h2
             id="mapa-presidente-titulo"
-            className="text-lg font-semibold sm:text-xl"
+            className="text-lg font-semibold sm:text-xl max-sm:text-sm"
           >
             Mapa do 2º turno
           </h2>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            {ufSelecionada
-              ? `Quem teve mais votos em cada município de ${nomeUf}, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}.`
-              : `Quem teve mais votos em cada município, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}. Clique em um estado para detalhar.`}
-          </p>
+          {ufSelecionada ? (
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground max-sm:mt-0.5 max-sm:line-clamp-1 max-sm:text-[11px]">
+              {`Quem teve mais votos em cada município de ${nomeUf}, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}.`}
+            </p>
+          ) : (
+            // No mobile o texto explicativo sai da visão Brasil para o mapa
+            // ganhar altura; ao abrir uma UF ele volta (contexto do drill-down).
+            <p className="mt-1 max-w-2xl text-sm text-muted-foreground max-sm:hidden">
+              {`Quem teve mais votos em cada município, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}. Clique em um estado para detalhar.`}
+            </p>
+          )}
         </div>
         <Segmented
           value={escala}
           onChange={setEscala}
           label="Escala do mapa"
+          className="max-sm:[&_button]:px-1.5"
           options={[
             { value: "relativo", label: "Relativo" },
             { value: "absoluto", label: "Absoluto" },
@@ -481,7 +490,7 @@ export function MapaPresidente({
       </div>
 
       <div
-        className="relative mt-4 w-full sm:max-w-sm"
+        className="relative mt-4 w-full sm:max-w-sm max-sm:mt-2 max-sm:shrink-0 curta:hidden"
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
             setBuscaAberta(false);
@@ -555,7 +564,7 @@ export function MapaPresidente({
                 cancelarBusca();
               }
             }}
-            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 max-sm:h-8"
           />
           {busca || selecionado ? (
             <button
@@ -650,16 +659,19 @@ export function MapaPresidente({
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-        <div ref={containerRef} className="relative mx-auto w-full max-w-[600px]">
+      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start max-sm:mt-2 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col max-sm:gap-2">
+        <div
+          ref={containerRef}
+          className="relative mx-auto w-full max-w-[600px] max-sm:min-h-0 max-sm:flex-1"
+        >
           {carregandoMapa ? (
-            <Skeleton className="aspect-square w-full rounded-xl" />
+            <Skeleton className="aspect-square w-full rounded-xl max-sm:aspect-auto max-sm:h-full" />
           ) : ufSelecionada ? (
             <svg
               data-testid="mapa-municipios"
               data-uf={ufSelecionada}
               viewBox={`0 0 ${MAPA_VIEW} ${MAPA_VIEW}`}
-              className="block h-auto w-full"
+              className="block h-auto w-full max-sm:h-full max-sm:min-h-0"
               role="group"
               aria-label={`Mapa dos municípios de ${nomeUf} na votação do 2º turno`}
             >
@@ -748,7 +760,7 @@ export function MapaPresidente({
             <svg
               data-testid="mapa-estados"
               viewBox={`0 0 ${MAPA_VIEW} ${MAPA_VIEW}`}
-              className="block h-auto w-full"
+              className="block h-auto w-full max-sm:h-full max-sm:min-h-0"
               role="group"
               aria-label="Mapa do Brasil com a votação de cada município no 2º turno; os estados são clicáveis para detalhar"
             >
@@ -988,40 +1000,18 @@ export function MapaPresidente({
           ) : null}
         </div>
 
-        <aside className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span
-                className="h-3.5 w-3.5 shrink-0 rounded-sm ring-1 ring-black/10"
-                style={{ background: candidatoA.cor }}
-                aria-hidden
-              />
-              <span className="min-w-0 truncate font-medium">
-                {candidatoA.nomeUrna}
-              </span>
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                {candidatoA.siglaPartido} · {candidatoA.numero}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span
-                className="h-3.5 w-3.5 shrink-0 rounded-sm ring-1 ring-black/10"
-                style={{ background: candidatoB.cor }}
-                aria-hidden
-              />
-              <span className="min-w-0 truncate font-medium">
-                {candidatoB.nomeUrna}
-              </span>
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                {candidatoB.siglaPartido} · {candidatoB.numero}
-              </span>
-            </div>
-          </div>
-
+        <aside
+          className={cn(
+            "space-y-4 max-sm:shrink-0 max-sm:space-y-1.5",
+            // No drill-down mobile a legenda sai de cena: o mapa precisa da
+            // altura toda para os municípios continuarem clicáveis.
+            ufSelecionada && "max-sm:hidden",
+          )}
+        >
           {selecionado ? (
             <div
               data-testid="municipio-selecionado"
-              className="rounded-xl border border-border bg-muted/40 p-3"
+              className="rounded-xl border border-border bg-muted/40 p-3 max-sm:hidden"
             >
               <div className="flex items-start gap-2">
                 <div className="min-w-0 flex-1">
@@ -1099,7 +1089,7 @@ export function MapaPresidente({
           {coletando ? (
             <div
               data-testid="mapa-presidente-coleta"
-              className="space-y-1.5 border-t border-border pt-3"
+              className="space-y-1.5 border-t border-border pt-3 max-sm:space-y-1 max-sm:border-0 max-sm:pt-1"
             >
               <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>
@@ -1118,7 +1108,7 @@ export function MapaPresidente({
                 label="Progresso da coleta municipal"
                 className="h-1.5"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground max-sm:hidden">
                 O servidor busca os municípios aos poucos; o mapa se completa
                 sozinho.
               </p>
@@ -1127,64 +1117,67 @@ export function MapaPresidente({
 
           <div
             data-testid="mapa-presidente-legenda"
-            className="border-t border-border pt-3"
+            className="border-t border-border pt-3 first:border-t-0 first:pt-0 max-sm:flex max-sm:items-center max-sm:gap-2 max-sm:border-0 max-sm:pt-1"
           >
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 max-sm:mb-0 max-sm:shrink-0 max-sm:gap-1 curta:hidden">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground max-sm:hidden">
                 Cores
               </span>
               <Segmented
                 value={modoCores}
                 onChange={setModoCores}
                 label="Cores do gradiente do mapa"
+                className="max-sm:[&_button]:px-1.5"
                 options={[
                   { value: "neutro", label: "Com neutro" },
                   { value: "direto", label: "Sem neutro" },
                 ]}
               />
             </div>
-            <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium">
-              <span className="min-w-0 truncate" style={{ color: candidatoB.cor }}>
-                {candidatoB.nomeUrna}
-              </span>
-              {escala === "absoluto" ? (
-                <span className="shrink-0 text-muted-foreground">empate</span>
-              ) : null}
-              <span
-                className="ml-auto min-w-0 truncate text-right"
-                style={{ color: candidatoA.cor }}
-              >
-                {candidatoA.nomeUrna}
-              </span>
+            <div className="max-sm:min-w-0 max-sm:flex-1">
+              <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium">
+                <span className="min-w-0 truncate" style={{ color: candidatoB.cor }}>
+                  {candidatoB.nomeUrna}
+                </span>
+                {escala === "absoluto" ? (
+                  <span className="shrink-0 text-muted-foreground">empate</span>
+                ) : null}
+                <span
+                  className="ml-auto min-w-0 truncate text-right"
+                  style={{ color: candidatoA.cor }}
+                >
+                  {candidatoA.nomeUrna}
+                </span>
+              </div>
+              <div
+                className="h-2.5 w-full rounded-full"
+                style={{
+                  background:
+                    modoCores === "neutro"
+                      ? `linear-gradient(to right, ${candidatoB.cor}, ${COR_NEUTRA}, ${candidatoA.cor})`
+                      : `linear-gradient(to right, ${candidatoB.cor}, ${candidatoA.cor})`,
+                }}
+                aria-hidden
+              />
+              <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground curta:hidden">
+                <span className="tabular">
+                  {escala === "relativo"
+                    ? minPercentual != null
+                      ? formatPercent(100 - minPercentual, 1)
+                      : "—"
+                    : "100%"}
+                </span>
+                {escala === "absoluto" ? <span>50% × 50%</span> : null}
+                <span className="tabular">
+                  {escala === "relativo"
+                    ? maxPercentual != null
+                      ? formatPercent(maxPercentual, 1)
+                      : "—"
+                    : "100%"}
+                </span>
+              </div>
             </div>
-            <div
-              className="h-2.5 w-full rounded-full"
-              style={{
-                background:
-                  modoCores === "neutro"
-                    ? `linear-gradient(to right, ${candidatoB.cor}, ${COR_NEUTRA}, ${candidatoA.cor})`
-                    : `linear-gradient(to right, ${candidatoB.cor}, ${candidatoA.cor})`,
-              }}
-              aria-hidden
-            />
-            <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground">
-              <span className="tabular">
-                {escala === "relativo"
-                  ? minPercentual != null
-                    ? formatPercent(100 - minPercentual, 1)
-                    : "—"
-                  : "100%"}
-              </span>
-              {escala === "absoluto" ? <span>50% × 50%</span> : null}
-              <span className="tabular">
-                {escala === "relativo"
-                  ? maxPercentual != null
-                    ? formatPercent(maxPercentual, 1)
-                    : "—"
-                  : "100%"}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground max-sm:hidden">
               {escala === "relativo"
                 ? `Cada ${unidade} é comparado com os extremos ${onde}: o mais favorável a ${candidatoA.nomeUrna} fica na ponta vermelha e o mais favorável a ${candidatoB.nomeUrna} na ponta azul.`
                 : "A cor segue a diferença real entre os dois candidatos: empate no centro, 100% de um candidato na ponta."}
@@ -1193,12 +1186,12 @@ export function MapaPresidente({
                 : null}
             </p>
             {!ufSelecionada && usandoMunicipios ? (
-              <p className="mt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-[10px] text-muted-foreground max-sm:hidden">
                 Municípios ainda sem dados aparecem com a cor do estado.
               </p>
             ) : null}
             {atualizadoColeta ? (
-              <p className="mt-1 text-[10px] text-muted-foreground">
+              <p className="mt-1 text-[10px] text-muted-foreground max-sm:hidden">
                 Dados do TSE de {formatDateTime(atualizadoColeta)}
               </p>
             ) : null}
@@ -1207,7 +1200,7 @@ export function MapaPresidente({
           {temDados ? (
             <p
               data-testid="mapa-presidente-vitorias"
-              className="border-t border-border pt-3 text-xs text-muted-foreground"
+              className="border-t border-border pt-3 text-xs text-muted-foreground max-sm:hidden"
             >
               {candidatoA.nomeUrna} à frente em{" "}
               <span className="font-semibold text-foreground">{vitoriasA}</span>{" "}
@@ -1223,7 +1216,7 @@ export function MapaPresidente({
                 : ""}
             </p>
           ) : (
-            <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+            <p className="border-t border-border pt-3 text-xs text-muted-foreground max-sm:hidden">
               {aguardandoLiberacao
                 ? "A coleta do 2º turno começa em 25/10 às 16h (Brasília)."
                 : coletando

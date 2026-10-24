@@ -133,9 +133,15 @@ export default function HomePage() {
   }, [presidente.data, presidentePorUf, eleicoes.federal.turno]);
 
   return (
-    <div className="space-y-8">
+    // No mobile a home é uma tela só: placar + mapa presidencial, sem scroll.
+    // (O `-my-6` cancela o padding vertical do <main> e o footer é ocultado
+    // pelo CSS quando este container está presente.)
+    <div
+      data-mobile-home
+      className="space-y-8 max-sm:flex max-sm:h-[calc(100svh-3.5625rem)] max-sm:flex-col max-sm:gap-3 max-sm:space-y-0 max-sm:-my-6 max-sm:py-2"
+    >
       {resumo.isError ? (
-        <Card className="p-4 text-sm text-muted-foreground">
+        <Card className="p-4 text-sm text-muted-foreground max-sm:hidden">
           Não foi possível carregar os dados do TSE agora. O serviço de coleta pode estar
           reiniciando — os números aparecem assim que a conexão for restabelecida.
         </Card>
@@ -160,7 +166,7 @@ export default function HomePage() {
       ) : null}
 
       {/* Mapa */}
-      <section className="grid gap-4 lg:grid-cols-5">
+      <section className="grid gap-4 lg:grid-cols-5 max-sm:hidden">
         <Card className="min-w-0 lg:col-span-3 p-5">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Governadores por estado</h2>
@@ -233,7 +239,7 @@ export default function HomePage() {
       </section>
 
       {/* Grid de governadores */}
-      <section>
+      <section className="max-sm:hidden">
         <h2 className="mb-3 text-lg font-semibold">Governador por estado</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {UFS.map((u) => {
