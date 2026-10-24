@@ -399,8 +399,8 @@ test.describe("2º turno presidencial", () => {
     await expect(mapa.getByTestId("mapa-presidente-vazio")).toBeVisible();
     const spPath = mapa.getByTestId("mapa-estado-base-sp");
     await expect(spPath).toHaveAttribute("fill", "#e4e9f2");
-    // Divisas entre UFs mais grossas que o padrão antigo (0.8).
-    await expect(spPath).toHaveAttribute("stroke-width", "1.2");
+    // Divisas entre UFs finas, para não competir com as cores do heatmap.
+    await expect(spPath).toHaveAttribute("stroke-width", "0.8");
 
     // A malha municipal do Brasil é carregada, mas sem votos não pinta nada.
     const camadaBrasil = mapa.getByTestId("mapa-municipios-brasil");
@@ -483,6 +483,104 @@ test.describe("2º turno presidencial", () => {
     expect(erros, erros.join("\n")).toEqual([]);
   });
 
+  test("busca um município, abre a UF e mostra os dados", async ({
+    page,
+    context,
+  }) => {
+    const erros = monitorar(page);
+    const assets: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("municipios-brasil")) assets.push(req.url());
+    });
+    await context.addCookies([
+      { name: "mock_municipios", value: "1", url: "http://localhost:3000" },
+    ]);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const mapa = await abrirMapaPresidente(page);
+    const busca = mapa.getByRole("combobox", { name: "Buscar município" });
+    await expect(busca).toBeEnabled({ timeout: 20_000 });
+
+    // O asset municipal é versionado na URL para furar o cache longo de public/.
+    expect(
+      assets.some((url) => /municipios-brasil\.json\?v=\d+/.test(url)),
+    ).toBe(true);
+
+    await busca.fill("são paulo");
+    await mapa
+      .getByRole("option", { name: "São Paulo (SP)", exact: true })
+      .click();
+
+    // Abre a UF do município e destaca o polígono selecionado.
+    await expect(mapa).toHaveAttribute("data-uf", "sp");
+    await expect(mapa.getByTestId("mapa-municipio-selecionado")).toBeVisible();
+
+    // O nome completo do município fica no input, com o botão de limpar.
+    await expect(busca).toHaveValue("São Paulo");
+    const limpar = mapa.getByRole("button", {
+      name: "Limpar busca de município",
+    });
+    await expect(limpar).toBeVisible();
+
+    // Painel (sidebar no desktop, resumo acima do mapa no mobile) mostra os votos.
+    const painel = page
+      .getByTestId(/^municipio-selecionado/)
+      .filter({ visible: true })
+      .first();
+    await expect(painel).toContainText("São Paulo");
+    await expect(painel).toContainText("LULA");
+    await expect(painel).toContainText("FLAVIO BOLSONARO");
+
+    // Clicar em outro município do mapa troca a seleção (e o nome no input).
+    await mapa.getByTestId("mapa-municipio-3509502").click();
+    await expect(
+      page.getByTestId(/^municipio-selecionado/).filter({ visible: true }).first(),
+    ).toContainText("Campinas");
+    await expect(busca).toHaveValue("Campinas");
+
+    // Limpar a busca também remove a seleção, sem sair da UF.
+    await limpar.click();
+    await expect(busca).toHaveValue("");
+    await expect(page.getByTestId(/^municipio-selecionado/)).toHaveCount(0);
+    await expect(mapa).toHaveAttribute("data-uf", "sp");
+
+    // Voltar ao Brasil limpa tudo.
+    await mapa.getByRole("button", { name: "Brasil" }).click();
+    await expect(mapa).toHaveAttribute("data-uf", "");
+    await expect(busca).toHaveValue("");
+
+    await semOverflowHorizontal(page);
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+
+  test("dica de busca curta não desloca o mapa", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    const mapa = await abrirMapaPresidente(page);
+    const busca = mapa.getByRole("combobox", { name: "Buscar município" });
+    await expect(busca).toBeEnabled({ timeout: 20_000 });
+    const svg = mapa.getByTestId("mapa-estados");
+    await expect(svg).toBeVisible({ timeout: 20_000 });
+
+    // Posição no documento (imune ao scroll que o foco no input provoca).
+    const topoMapa = async () => {
+      const box = await svg.boundingBox();
+      const scroll = await page.evaluate(() => window.scrollY);
+      return box!.y + scroll;
+    };
+    const antes = await topoMapa();
+
+    // Com 1 letra aparece a dica, mas ela flutua (não empurra o mapa).
+    await busca.fill("s");
+    await expect(mapa.getByText("Digite ao menos 2 letras.")).toBeVisible();
+    expect(await topoMapa()).toBeCloseTo(antes, 0);
+
+    // A lista de resultados também é flutuante.
+    await busca.fill("campinas");
+    await expect(mapa.getByRole("option").first()).toBeVisible();
+    expect(await topoMapa()).toBeCloseTo(antes, 0);
+  });
+
   test("visão Brasil mostra os municípios sem interação e mantém o clique no estado", async ({
     page,
     context,
@@ -539,6 +637,52 @@ test.describe("2º turno presidencial", () => {
     await expect(mapa.getByTestId("mapa-presidente-vazio")).toHaveCount(0);
 
     expect(erros, erros.join("\n")).toEqual([]);
+  });
+});
+
+test.describe("tema", () => {
+  // Simula um sistema operacional em modo escuro.
+  test.use({ colorScheme: "dark" });
+
+  test("segue o sistema quando não há preferência salva", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    // A classe vem do script inline no <head>, antes do primeiro paint.
+    await expect(page.locator("html")).toHaveClass(/dark/);
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+    await expect(
+      page.getByRole("button", { name: "Alternar tema" }),
+    ).toBeVisible();
+  });
+
+  test("preferência salva vence o sistema", async ({ page, context }) => {
+    await context.addInitScript(() =>
+      localStorage.setItem("apuracao-theme", "light"),
+    );
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
+  });
+
+  test("alterna o tema e persiste a escolha", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const html = page.locator("html");
+    const botao = page.getByRole("button", { name: "Alternar tema" });
+
+    // Começa escuro (sistema); o primeiro clique força o claro.
+    await expect(html).toHaveClass(/dark/);
+    await botao.click();
+    await expect(html).not.toHaveClass(/dark/);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("apuracao-theme")))
+      .toBe("light");
+
+    await botao.click();
+    await expect(html).toHaveClass(/dark/);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("apuracao-theme")))
+      .toBe("dark");
   });
 });
 

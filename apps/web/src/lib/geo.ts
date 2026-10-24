@@ -75,21 +75,35 @@ export function useBrasilGeo(): Array<{ uf: string; d: string }> {
 
 interface MunicipiosBrasilAsset {
   view: number;
-  municipios: Array<[string, string, string]>;
+  /** Versão do formato do asset (2 = inclui o nome do município na tupla). */
+  versao?: number;
+  /** `[código IBGE, UF, caminho SVG, nome]`. */
+  municipios: Array<[string, string, string, string?]>;
 }
 
 export interface MunicipioBrasilProjetado {
   /** Código IBGE (7 dígitos). */
   id: string;
   uf: string;
+  nome: string;
   /** Caminho SVG já projetado no viewBox do mapa do Brasil. */
   d: string;
 }
 
 let municipiosBrasilCache: Promise<MunicipioBrasilProjetado[]> | null = null;
 
+/**
+ * Versão do asset municipal. Entra na URL (`?v=`) porque `public/` é servido
+ * com cache longo (7 dias) e o navegador não revalida sozinho: sem isso, quem
+ * já tinha baixado a versão antiga (sem nomes) ficaria com a busca vazia.
+ * Suba a versão sempre que o formato do arquivo mudar.
+ */
+const MUNICIPIOS_BRASIL_VERSAO = 2;
+
 function carregarMunicipiosBrasil(): Promise<MunicipioBrasilProjetado[]> {
-  municipiosBrasilCache ??= fetch("/geo/municipios-brasil.json")
+  municipiosBrasilCache ??= fetch(
+    `/geo/municipios-brasil.json?v=${MUNICIPIOS_BRASIL_VERSAO}`,
+  )
     .then((r) => {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json() as Promise<MunicipiosBrasilAsset>;
@@ -100,7 +114,17 @@ function carregarMunicipiosBrasil(): Promise<MunicipioBrasilProjetado[]> {
           `malha municipal do Brasil em viewBox ${json.view}, esperado ${MAPA_VIEW}`,
         );
       }
-      return json.municipios.map(([id, uf, d]) => ({ id, uf, d }));
+      if (json.versao !== MUNICIPIOS_BRASIL_VERSAO) {
+        throw new Error(
+          `malha municipal do Brasil na versão ${json.versao}, esperado ${MUNICIPIOS_BRASIL_VERSAO}`,
+        );
+      }
+      return json.municipios.map(([id, uf, d, nome]) => ({
+        id,
+        uf,
+        nome: nome ?? "",
+        d,
+      }));
     })
     .catch((err: unknown) => {
       municipiosBrasilCache = null;

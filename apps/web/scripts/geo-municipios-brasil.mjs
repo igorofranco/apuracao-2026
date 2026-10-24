@@ -34,13 +34,16 @@ for (const arquivo of readdirSync(MUNICIPIOS_DIR).sort()) {
   for (const feature of json.features) {
     const id = feature?.properties?.id;
     if (!id) continue;
-    municipios.push([String(id), uf, path(feature) ?? ""]);
+    // O nome entra na tupla para a busca de município no mapa não precisar de
+    // outro arquivo/requisição.
+    const nome = String(feature?.properties?.name ?? "");
+    municipios.push([String(id), uf, path(feature) ?? "", nome]);
   }
 }
 
 municipios.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
-const json = JSON.stringify({ view: VIEW, municipios });
+const json = JSON.stringify({ view: VIEW, versao: 2, municipios });
 writeFileSync(SAIDA, json);
 
 console.log(

@@ -1,30 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Moon, Sun, Vote } from "lucide-react";
 import { LiveBadge } from "@/components/live-badge";
 import { buttonClass } from "@/components/ui";
+import { TEMA_CHAVE } from "@/lib/tema";
 
 export function SiteHeader() {
-  const [dark, setDark] = useState(true);
-
+  // O tema inicial é aplicado pelo script inline do layout (antes do primeiro
+  // paint). Aqui só reagimos à troca do sistema quando não há escolha salva.
   useEffect(() => {
-    const stored = localStorage.getItem("apuracao-theme");
-    const prefersDark =
-      stored === "dark" ||
-      (stored == null && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setDark(prefersDark);
-    document.documentElement.classList.toggle("dark", prefersDark);
+    const sistema = window.matchMedia("(prefers-color-scheme: dark)");
+    const aoMudar = (evento: MediaQueryListEvent) => {
+      if (localStorage.getItem(TEMA_CHAVE) == null) {
+        document.documentElement.classList.toggle("dark", evento.matches);
+      }
+    };
+    sistema.addEventListener("change", aoMudar);
+    return () => sistema.removeEventListener("change", aoMudar);
   }, []);
 
-  const toggle = () => {
-    setDark((prev) => {
-      const next = !prev;
-      document.documentElement.classList.toggle("dark", next);
-      localStorage.setItem("apuracao-theme", next ? "dark" : "light");
-      return next;
-    });
+  const alternarTema = () => {
+    const escuro = document.documentElement.classList.toggle("dark");
+    try {
+      localStorage.setItem(TEMA_CHAVE, escuro ? "dark" : "light");
+    } catch {
+      // Sem armazenamento a escolha vale só nesta visita.
+    }
   };
 
   return (
@@ -56,11 +59,14 @@ export function SiteHeader() {
           </span>
           <button
             type="button"
-            onClick={toggle}
+            onClick={alternarTema}
             aria-label="Alternar tema"
             className={buttonClass("outline", "h-8 w-8 p-0")}
           >
-            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {/* Os dois ícones ficam no DOM: o CSS escolhe conforme a classe
+                `.dark` do <html>, sem depender de estado/hidratação. */}
+            <Sun className="hidden h-4 w-4 dark:block" />
+            <Moon className="h-4 w-4 dark:hidden" />
           </button>
         </div>
       </div>

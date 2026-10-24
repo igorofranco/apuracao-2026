@@ -134,7 +134,7 @@ export function PresidenteSegundoTurno({
               ? "2º turno: Presidente da República"
               : "Projeção atualizada conforme a apuração"}
           </span>
-          {mostrarLink ? (
+          {mostrarLink && !segundoTurno ? (
             <Link
               href="/presidente"
               className="font-medium text-primary hover:underline"

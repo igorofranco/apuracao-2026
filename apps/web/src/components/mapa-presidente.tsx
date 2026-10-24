@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, type MouseEvent } from "react";
+import { useId, useMemo, useRef, useState, type MouseEvent } from "react";
+import { Search, X } from "lucide-react";
 import { getUf } from "@apuracao/shared";
 import { Progress, Segmented, Skeleton } from "@/components/ui";
 import {
@@ -22,6 +23,7 @@ import {
   type MunicipioMapa,
 } from "@/lib/mapa";
 import { formatDateTime, formatInt, formatPercent } from "@/lib/format";
+import { buscarMunicipios } from "@/lib/busca-municipio";
 import { useMunicipiosPresidenteBrasil } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +79,13 @@ export function MapaPresidente({
     y: number;
     regiao: Regiao;
   } | null>(null);
+  const [busca, setBusca] = useState("");
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [buscaAtiva, setBuscaAtiva] = useState(0);
+  const [municipioSelecionadoId, setMunicipioSelecionadoId] = useState<
+    string | null
+  >(null);
+  const idBusca = useId();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const pathsEstados = useBrasilGeo();
@@ -197,6 +206,49 @@ export function MapaPresidente({
     [regioesUf],
   );
 
+  /* ------------------------- Busca de município ------------------------- */
+
+  const municipiosIndice = brasilMunicipiosGeo.municipios;
+  const municipiosIndicePorId = useMemo(
+    () => new Map(municipiosIndice.map((m) => [m.id, m])),
+    [municipiosIndice],
+  );
+  const resultadosBusca = useMemo(
+    () => (buscaAberta ? buscarMunicipios(municipiosIndice, busca) : []),
+    [buscaAberta, busca, municipiosIndice],
+  );
+  const selecionado = useMemo(() => {
+    if (!municipioSelecionadoId) return null;
+    const indice = municipiosIndicePorId.get(municipioSelecionadoId);
+    const geometria = municipiosGeo.paths.find(
+      (m) => m.id === municipioSelecionadoId,
+    );
+    const votos = dadosPorCdi.get(municipioSelecionadoId);
+    return {
+      id: municipioSelecionadoId,
+      nome: geometria?.nome ?? indice?.nome ?? municipioSelecionadoId,
+      uf: indice?.uf ?? ufSelecionada ?? "",
+      votosA: votos?.votosA ?? 0,
+      votosB: votos?.votosB ?? 0,
+    };
+  }, [
+    municipioSelecionadoId,
+    municipiosIndicePorId,
+    municipiosGeo.paths,
+    dadosPorCdi,
+    ufSelecionada,
+  ]);
+  const selecionadoGeometria = useMemo(
+    () =>
+      municipioSelecionadoId
+        ? municipiosGeo.paths.find((m) => m.id === municipioSelecionadoId)
+        : undefined,
+    [municipioSelecionadoId, municipiosGeo.paths],
+  );
+  const percentualSelecionado = selecionado
+    ? percentualEntreDois(selecionado.votosA, selecionado.votosB)
+    : null;
+
   const usandoMunicipios =
     Boolean(ufSelecionada) || municipiosComVotos.length > 0;
   const regioesEscala = ufSelecionada
@@ -312,15 +364,52 @@ export function MapaPresidente({
       ? Math.min(100, (coletadosColeta / totalColeta) * 100)
       : 0;
 
-  const abrirUf = (uf: string) => {
+  const abrirUf = (
+    uf: string,
+    municipioId: string | null = null,
+    nome: string | null = null,
+  ) => {
     setUfSelecionada(uf);
     setFocoUf(null);
     setHover(null);
+    setMunicipioSelecionadoId(municipioId);
+    setBusca(nome ?? "");
+    setBuscaAberta(false);
+    setBuscaAtiva(0);
   };
   const voltarAoBrasil = () => {
     setUfSelecionada(null);
     setFocoUf(null);
     setHover(null);
+    setMunicipioSelecionadoId(null);
+    setBusca("");
+    setBuscaAberta(false);
+    setBuscaAtiva(0);
+  };
+  const selecionarMunicipio = (municipio: {
+    id: string;
+    uf: string;
+    nome: string;
+  }) => {
+    // O nome do município fica no input (é a seleção atual).
+    abrirUf(municipio.uf, municipio.id, municipio.nome);
+  };
+  const selecionarNoMapa = (id: string, nome: string) => {
+    setMunicipioSelecionadoId(id);
+    setBusca(nome);
+    setBuscaAberta(false);
+    setBuscaAtiva(0);
+  };
+  const limparBusca = () => {
+    setBusca("");
+    setBuscaAberta(false);
+    setBuscaAtiva(0);
+    setMunicipioSelecionadoId(null);
+  };
+  const cancelarBusca = () => {
+    setBuscaAberta(false);
+    setBuscaAtiva(0);
+    if (!selecionado) setBusca("");
   };
   const mover = (event: MouseEvent, regiao: Regiao | undefined) => {
     if (!regiao || regiao.votosA + regiao.votosB <= 0) return;
@@ -391,6 +480,176 @@ export function MapaPresidente({
         />
       </div>
 
+      <div
+        className="relative mt-4 w-full sm:max-w-sm"
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            setBuscaAberta(false);
+          }
+        }}      >
+        <label htmlFor={idBusca} className="sr-only">
+          Buscar município
+        </label>
+        <div className="relative">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <input
+            id={idBusca}
+            type="text"
+            role="combobox"
+            aria-expanded={buscaAberta}
+            aria-controls={`${idBusca}-resultados`}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              resultadosBusca[buscaAtiva]
+                ? `${idBusca}-${resultadosBusca[buscaAtiva]!.id}`
+                : undefined
+            }
+            autoComplete="off"
+            disabled={!brasilMunicipiosGeo.carregado}
+            placeholder={
+              brasilMunicipiosGeo.carregado
+                ? "Buscar município…"
+                : "Carregando municípios…"
+            }
+            value={busca}
+            onChange={(event) => {
+              const valor = event.target.value;
+              setBusca(valor);
+              setBuscaAberta(true);
+              setBuscaAtiva(0);
+              // Editar a busca inicia uma nova seleção: o município atual deixa
+              // de ficar destacado (evita painel mostrando outro município).
+              if (selecionado && valor !== selecionado.nome) {
+                setMunicipioSelecionadoId(null);
+              }
+            }}
+            onFocus={(event) => {
+              // Com um município selecionado, o nome já está no campo: deixa
+              // tudo selecionado para a próxima digitação substituí-lo.
+              if (selecionado && busca === selecionado.nome) {
+                event.currentTarget.select();
+                return;
+              }
+              setBuscaAberta(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setBuscaAberta(true);
+                setBuscaAtiva((atual) =>
+                  Math.min(atual + 1, Math.max(0, resultadosBusca.length - 1)),
+                );
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setBuscaAtiva((atual) => Math.max(atual - 1, 0));
+              } else if (event.key === "Enter") {
+                const municipio = resultadosBusca[buscaAtiva];
+                if (municipio) {
+                  event.preventDefault();
+                  selecionarMunicipio(municipio);
+                }
+              } else if (event.key === "Escape") {
+                cancelarBusca();
+              }
+            }}
+            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          />
+          {busca || selecionado ? (
+            <button
+              type="button"
+              onClick={limparBusca}
+              aria-label="Limpar busca de município"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+        </div>
+
+        {buscaAberta && busca.trim().length >= 2 ? (
+          <ul
+            id={`${idBusca}-resultados`}
+            role="listbox"
+            aria-label="Municípios encontrados"
+            className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-border bg-card p-1 shadow-lg"
+          >
+            {resultadosBusca.length === 0 ? (
+              <li className="px-2 py-1.5 text-xs text-muted-foreground">
+                Nenhum município encontrado.
+              </li>
+            ) : (
+              resultadosBusca.map((municipio, indice) => (
+                <li key={municipio.id} role="presentation">
+                  <button
+                    type="button"
+                    role="option"
+                    id={`${idBusca}-${municipio.id}`}
+                    aria-selected={indice === buscaAtiva}
+                    aria-label={`${municipio.nome} (${municipio.uf.toUpperCase()})`}
+                    tabIndex={-1}
+                    onClick={() => selecionarMunicipio(municipio)}
+                    onMouseEnter={() => setBuscaAtiva(indice)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm",
+                      indice === buscaAtiva ? "bg-muted" : "hover:bg-muted/60",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {municipio.nome}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
+                      {municipio.uf}
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        ) : null}
+
+        {buscaAberta && busca.trim().length === 1 ? (
+          <div className="absolute z-30 mt-1 w-full rounded-lg border border-border bg-card px-2.5 py-2 text-xs text-muted-foreground shadow-lg">
+            Digite ao menos 2 letras.
+          </div>
+        ) : null}
+      </div>
+
+      {selecionado ? (
+        <div
+          data-testid="municipio-selecionado-resumo"
+          className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs lg:hidden"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate">
+              <span className="font-semibold">{selecionado.nome}</span> ·{" "}
+              {selecionado.uf.toUpperCase()}
+              {selecionado.votosA + selecionado.votosB > 0
+                ? ` · ${formatInt(selecionado.votosA + selecionado.votosB)} votos`
+                : " · sem dados do 2º turno"}
+            </p>
+            {percentualSelecionado != null ? (
+              <p className="tabular truncate text-muted-foreground">
+                {candidatoA.nomeUrna}{" "}
+                {formatPercent(percentualSelecionado, 1)} ·{" "}
+                {candidatoB.nomeUrna}{" "}
+                {formatPercent(100 - percentualSelecionado, 1)}
+              </p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMunicipioSelecionadoId(null)}
+            aria-label="Fechar município selecionado"
+            className="shrink-0 rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ) : null}
+
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
         <div ref={containerRef} className="relative mx-auto w-full max-w-[600px]">
           {carregandoMapa ? (
@@ -429,6 +688,8 @@ export function MapaPresidente({
                     }
                     data-testid={`mapa-municipio-${municipio.id}`}
                     data-votos={regiao.votosA + regiao.votosB}
+                    className="cursor-pointer"
+                    onClick={() => selecionarNoMapa(municipio.id, municipio.nome)}
                     onMouseMove={(e) => mover(e, regiao)}
                     onMouseLeave={() => setHover(null)}
                   >
@@ -456,6 +717,32 @@ export function MapaPresidente({
                   pointerEvents="none"
                 />
               ) : null}
+              {selecionadoGeometria?.d ? (
+                <g pointerEvents="none">
+                  {/* Halo na cor do fundo para o contorno aparecer sobre
+                      qualquer cor do heatmap. */}
+                  <path
+                    d={selecionadoGeometria.d}
+                    fill="var(--foreground)"
+                    fillOpacity={0.22}
+                  />
+                  <path
+                    d={selecionadoGeometria.d}
+                    fill="none"
+                    stroke="var(--background)"
+                    strokeWidth={4.5}
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    data-testid="mapa-municipio-selecionado"
+                    d={selecionadoGeometria.d}
+                    fill="none"
+                    stroke="var(--foreground)"
+                    strokeWidth={2}
+                    strokeLinejoin="round"
+                  />
+                </g>
+              ) : null}
             </svg>
           ) : (
             <svg
@@ -478,7 +765,7 @@ export function MapaPresidente({
                         d={d}
                         fill="var(--muted)"
                         stroke="var(--background)"
-                        strokeWidth={1.2}
+                        strokeWidth={0.8}
                       />
                     );
                   }
@@ -491,7 +778,7 @@ export function MapaPresidente({
                       d={d}
                       fill={corEstado(regiao)}
                       stroke="var(--background)"
-                      strokeWidth={1.2}
+                      strokeWidth={0.8}
                     />
                   );
                 })}
@@ -531,7 +818,7 @@ export function MapaPresidente({
                         d={d}
                         fill="none"
                         stroke="var(--background)"
-                        strokeWidth={1.5}
+                        strokeWidth={0.8}
                         strokeLinejoin="round"
                       />
                       {destacado ? (
@@ -730,6 +1017,84 @@ export function MapaPresidente({
               </span>
             </div>
           </div>
+
+          {selecionado ? (
+            <div
+              data-testid="municipio-selecionado"
+              className="rounded-xl border border-border bg-muted/40 p-3"
+            >
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Município selecionado
+                  </p>
+                  <p className="truncate text-sm font-semibold">
+                    {selecionado.nome}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {selecionado.uf.toUpperCase()}
+                    {selecionado.votosA + selecionado.votosB > 0
+                      ? ` · ${formatInt(
+                          selecionado.votosA + selecionado.votosB,
+                        )} votos`
+                      : " · sem dados do 2º turno"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={limparBusca}
+                  aria-label="Fechar município selecionado"
+                  className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {percentualSelecionado != null ? (
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-sm"
+                        style={{ background: candidatoA.cor }}
+                        aria-hidden
+                      />
+                      <span className="truncate">{candidatoA.nomeUrna}</span>
+                    </span>
+                    <span className="tabular shrink-0 font-medium">
+                      {formatPercent(percentualSelecionado, 1)}
+                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                        {formatInt(selecionado.votosA)}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-sm"
+                        style={{ background: candidatoB.cor }}
+                        aria-hidden
+                      />
+                      <span className="truncate">{candidatoB.nomeUrna}</span>
+                    </span>
+                    <span className="tabular shrink-0 font-medium">
+                      {formatPercent(100 - percentualSelecionado, 1)}
+                      <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                        {formatInt(selecionado.votosB)}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {!selecionadoGeometria?.d ? (
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  A malha oficial deste município está sem geometria na base do
+                  mapa; os votos continuam disponíveis aqui.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {coletando ? (
             <div
