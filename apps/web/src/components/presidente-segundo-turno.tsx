@@ -213,7 +213,7 @@ function CandidatoDestaque({
 
         <div className="shrink-0 text-right">
           <div className="tabular text-xl font-bold leading-none @xs:text-2xl @md:text-3xl @xl:text-4xl">
-            {formatPercent(pct, 1)}
+            {formatPercent(pct)}
           </div>
           <div className="mt-0.5 hidden text-[11px] text-muted-foreground @md:block">
             dos votos válidos

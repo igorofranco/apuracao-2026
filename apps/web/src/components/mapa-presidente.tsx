@@ -664,9 +664,9 @@ export function MapaPresidente({
             </p>
             {percentualSelecionado != null ? (
               <p className="tabular truncate text-muted-foreground">
-                {candidatoA.nomeUrna} {formatPercent(percentualSelecionado, 1)}{" "}
+                {candidatoA.nomeUrna} {formatPercent(percentualSelecionado)}{" "}
                 · {candidatoB.nomeUrna}{" "}
-                {formatPercent(100 - percentualSelecionado, 1)}
+                {formatPercent(100 - percentualSelecionado)}
               </p>
             ) : null}
           </div>
@@ -707,10 +707,8 @@ export function MapaPresidente({
                       pctA != null
                         ? `${regiao.nome}: ${candidatoA.nomeUrna} ${formatPercent(
                             pctA,
-                            1,
                           )}, ${candidatoB.nomeUrna} ${formatPercent(
                             100 - pctA,
-                            1,
                           )}`
                         : `${regiao.nome}: sem dados do 2º turno`
                     }
@@ -920,7 +918,6 @@ export function MapaPresidente({
                         hover.regiao.votosA,
                         hover.regiao.votosB,
                       ) ?? 0,
-                      1,
                     )}
                   </span>
                 </div>
@@ -939,7 +936,6 @@ export function MapaPresidente({
                           hover.regiao.votosA,
                           hover.regiao.votosB,
                         ) ?? 0),
-                      1,
                     )}
                   </span>
                 </div>
@@ -1073,7 +1069,7 @@ export function MapaPresidente({
                       <span className="truncate">{candidatoA.nomeUrna}</span>
                     </span>
                     <span className="tabular shrink-0 font-medium">
-                      {formatPercent(percentualSelecionado, 1)}
+                      {formatPercent(percentualSelecionado)}
                       <span className="ml-1 text-[10px] font-normal text-muted-foreground">
                         {formatInt(selecionado.votosA)}
                       </span>
@@ -1089,7 +1085,7 @@ export function MapaPresidente({
                       <span className="truncate">{candidatoB.nomeUrna}</span>
                     </span>
                     <span className="tabular shrink-0 font-medium">
-                      {formatPercent(100 - percentualSelecionado, 1)}
+                      {formatPercent(100 - percentualSelecionado)}
                       <span className="ml-1 text-[10px] font-normal text-muted-foreground">
                         {formatInt(selecionado.votosB)}
                       </span>
@@ -1185,7 +1181,7 @@ export function MapaPresidente({
                 <span className="tabular">
                   {escala === "relativo"
                     ? minPercentual != null
-                      ? formatPercent(100 - minPercentual, 1)
+                      ? formatPercent(100 - minPercentual)
                       : "—"
                     : "100%"}
                 </span>
@@ -1193,7 +1189,7 @@ export function MapaPresidente({
                 <span className="tabular">
                   {escala === "relativo"
                     ? maxPercentual != null
-                      ? formatPercent(maxPercentual, 1)
+                      ? formatPercent(maxPercentual)
                       : "—"
                     : "100%"}
                 </span>

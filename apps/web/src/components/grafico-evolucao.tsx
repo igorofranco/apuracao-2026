@@ -82,10 +82,7 @@ function TooltipEvolucao({
               <span className="truncate">{serie.nomeUrna}</span>
             </span>
             <span className="tabular shrink-0 font-medium">
-              {formatPercent(
-                linha[serie.chave] as number | null | undefined,
-                1,
-              )}
+              {formatPercent(linha[serie.chave] as number | null | undefined)}
             </span>
           </div>
         ))}
@@ -230,7 +227,7 @@ export function GraficoEvolucao({
               {serie.nomeUrna}
             </span>
             <span className="tabular text-muted-foreground">
-              {formatPercent(ultimoPercentual(serie, linhas), 1)}
+              {formatPercent(ultimoPercentual(serie, linhas))}
             </span>
           </span>
         ))}
