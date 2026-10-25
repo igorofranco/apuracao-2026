@@ -103,8 +103,8 @@ export function MapaPresidente({
   /** Votação dos dois candidatos por código IBGE (payload nacional único). */
   const dadosPorCdi = useMemo(() => {
     const mapa = new Map<string, { votosA: number; votosB: number }>();
-    for (const [cdi, , votosA, votosB] of
-      municipiosQuery.data?.municipios ?? []) {
+    for (const [cdi, , votosA, votosB] of municipiosQuery.data?.municipios ??
+      []) {
       mapa.set(cdi, { votosA, votosB });
     }
     return mapa;
@@ -133,19 +133,14 @@ export function MapaPresidente({
   const estadosPosicoes = useMemo(() => {
     if (escala === "absoluto") {
       return new Map(
-        estadosComVotos.map((r) => [
-          r.id,
-          posicaoAbsoluta(r.votosA, r.votosB),
-        ]),
+        estadosComVotos.map((r) => [r.id, posicaoAbsoluta(r.votosA, r.votosB)]),
       );
     }
     const percentuais = estadosComVotos.map(
       (r) => percentualEntreDois(r.votosA, r.votosB) ?? 0,
     );
     const valores = posicoesRelativas(percentuais);
-    return new Map(
-      estadosComVotos.map((r, i) => [r.id, valores[i] ?? 0]),
-    );
+    return new Map(estadosComVotos.map((r, i) => [r.id, valores[i] ?? 0]));
   }, [escala, estadosComVotos]);
   const corEstado = (regiao: Regiao): string => {
     if (regiao.votosA + regiao.votosB <= 0) return COR_NEUTRA;
@@ -268,9 +263,7 @@ export function MapaPresidente({
   );
   const relativas = useMemo(() => {
     const valores = posicoesRelativas(percentuais);
-    return new Map(
-      comVotos.map((r, i) => [r.id, valores[i] ?? 0]),
-    );
+    return new Map(comVotos.map((r, i) => [r.id, valores[i] ?? 0]));
   }, [comVotos, percentuais]);
 
   const minPercentual = percentuais.length ? Math.min(...percentuais) : null;
@@ -335,7 +328,9 @@ export function MapaPresidente({
 
   const coleta = municipiosQuery.data;
   const porUf = ufSelecionada ? coleta?.porUf[ufSelecionada] : undefined;
-  const totalColeta = ufSelecionada ? (porUf?.total ?? 0) : (coleta?.total ?? 0);
+  const totalColeta = ufSelecionada
+    ? (porUf?.total ?? 0)
+    : (coleta?.total ?? 0);
   const coletadosColeta = ufSelecionada
     ? (porUf?.coletados ?? 0)
     : (coleta?.coletados ?? 0);
@@ -347,22 +342,17 @@ export function MapaPresidente({
   const erroColeta = municipiosQuery.isError;
   const coletando = Boolean(
     !aguardandoLiberacao &&
-      !coletaDesabilitada &&
-      !erroColeta &&
-      (coleta?.preparando ||
-        (totalColeta > 0 && coletadosColeta < totalColeta)),
+    !coletaDesabilitada &&
+    !erroColeta &&
+    (coleta?.preparando || (totalColeta > 0 && coletadosColeta < totalColeta)),
   );
-  const coletandoSemDados = Boolean(
-    ufSelecionada && coletando && !temDados,
-  );
+  const coletandoSemDados = Boolean(ufSelecionada && coletando && !temDados);
   const geometriaCarregando = Boolean(
     ufSelecionada && municipiosGeo.paths.length === 0,
   );
   const carregandoMapa = ufSelecionada ? geometriaCarregando : carregando;
   const progresso =
-    totalColeta > 0
-      ? Math.min(100, (coletadosColeta / totalColeta) * 100)
-      : 0;
+    totalColeta > 0 ? Math.min(100, (coletadosColeta / totalColeta) * 100) : 0;
 
   const abrirUf = (
     uf: string,
@@ -495,7 +485,8 @@ export function MapaPresidente({
           if (!event.currentTarget.contains(event.relatedTarget)) {
             setBuscaAberta(false);
           }
-        }}      >
+        }}
+      >
         <label htmlFor={idBusca} className="sr-only">
           Buscar município
         </label>
@@ -641,9 +632,8 @@ export function MapaPresidente({
             </p>
             {percentualSelecionado != null ? (
               <p className="tabular truncate text-muted-foreground">
-                {candidatoA.nomeUrna}{" "}
-                {formatPercent(percentualSelecionado, 1)} ·{" "}
-                {candidatoB.nomeUrna}{" "}
+                {candidatoA.nomeUrna} {formatPercent(percentualSelecionado, 1)}{" "}
+                · {candidatoB.nomeUrna}{" "}
                 {formatPercent(100 - percentualSelecionado, 1)}
               </p>
             ) : null}
@@ -678,10 +668,7 @@ export function MapaPresidente({
               {municipiosGeo.paths.map((municipio) => {
                 const regiao = porIdUf.get(municipio.id);
                 if (!regiao) return null;
-                const pctA = percentualEntreDois(
-                  regiao.votosA,
-                  regiao.votosB,
-                );
+                const pctA = percentualEntreDois(regiao.votosA, regiao.votosB);
                 const corRegiao = cor(regiao);
                 return (
                   <g
@@ -701,7 +688,9 @@ export function MapaPresidente({
                     data-testid={`mapa-municipio-${municipio.id}`}
                     data-votos={regiao.votosA + regiao.votosB}
                     className="cursor-pointer"
-                    onClick={() => selecionarNoMapa(municipio.id, municipio.nome)}
+                    onClick={() =>
+                      selecionarNoMapa(municipio.id, municipio.nome)
+                    }
                     onMouseMove={(e) => mover(e, regiao)}
                     onMouseLeave={() => setHover(null)}
                   >
@@ -971,7 +960,10 @@ export function MapaPresidente({
             </div>
           ) : null}
 
-          {!carregandoMapa && !temDados && ufSelecionada && coletaDesabilitada ? (
+          {!carregandoMapa &&
+          !temDados &&
+          ufSelecionada &&
+          coletaDesabilitada ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="max-w-xs rounded-xl border border-border bg-card/95 px-4 py-3 text-center shadow-sm backdrop-blur">
                 <p className="text-sm font-medium">
@@ -1098,9 +1090,7 @@ export function MapaPresidente({
                     : "Coletando municípios"}
                 </span>
                 <span className="tabular">
-                  {totalColeta
-                    ? `${coletadosColeta} / ${totalColeta}`
-                    : "—"}
+                  {totalColeta ? `${coletadosColeta} / ${totalColeta}` : "—"}
                 </span>
               </div>
               <Progress
@@ -1136,7 +1126,10 @@ export function MapaPresidente({
             </div>
             <div className="max-sm:min-w-0 max-sm:flex-1">
               <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium">
-                <span className="min-w-0 truncate" style={{ color: candidatoB.cor }}>
+                <span
+                  className="min-w-0 truncate"
+                  style={{ color: candidatoB.cor }}
+                >
                   {candidatoB.nomeUrna}
                 </span>
                 {escala === "absoluto" ? (
@@ -1218,7 +1211,7 @@ export function MapaPresidente({
           ) : (
             <p className="border-t border-border pt-3 text-xs text-muted-foreground max-sm:hidden">
               {aguardandoLiberacao
-                ? "A coleta do 2º turno começa em 25/10 às 16h (Brasília)."
+                ? "A coleta do 2º turno começa em 25/10 às 17h (Brasília)."
                 : coletando
                   ? "Coleta dos municípios em andamento."
                   : coletaDesabilitada
