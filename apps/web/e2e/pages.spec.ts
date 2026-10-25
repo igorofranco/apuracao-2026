@@ -423,6 +423,19 @@ test.describe("2º turno presidencial", () => {
     await expect(grafico.getByText("51,3%")).toBeVisible();
     await expect(grafico.getByText("48,7%")).toBeVisible();
 
+    // O gráfico também tem o switch de escala. No relativo, o domínio é o
+    // mínimo/máximo dos dados (não 0–100).
+    const relativo = mapa.getByRole("button", { name: "Relativo" });
+    const absoluto = mapa.getByRole("button", { name: "Absoluto" });
+    await expect(relativo).toBeVisible();
+    await expect(absoluto).toBeVisible();
+    await expect(relativo).toHaveAttribute("aria-pressed", "true");
+    await expect(grafico).toHaveAttribute("data-escala", "relativo");
+    const dominioRelativo = (await grafico.getAttribute("data-dominio"))!;
+    const [minRelativo, maxRelativo] = dominioRelativo.split(":").map(Number);
+    expect(minRelativo).toBeGreaterThan(0);
+    expect(maxRelativo).toBeLessThan(100);
+
     await semOverflowHorizontal(page);
     await semRotulosCortados(page);
     await page.addStyleTag({
@@ -432,6 +445,23 @@ test.describe("2º turno presidencial", () => {
     const dir = `e2e/screenshots/${testInfo.project.name}`;
     mkdirSync(dir, { recursive: true });
     await page.screenshot({ path: `${dir}/grafico-evolucao.png`, fullPage: true });
+
+    // Absoluto: eixo fixo em 0–100%.
+    await absoluto.click();
+    await expect(absoluto).toHaveAttribute("aria-pressed", "true");
+    await expect(grafico).toHaveAttribute("data-escala", "absoluto");
+    await expect(grafico).toHaveAttribute("data-dominio", "0:100");
+    await expect(grafico.getByText("0%", { exact: true })).toBeVisible();
+    await expect(grafico.getByText("100%", { exact: true })).toBeVisible();
+    await semRotulosCortados(page);
+    await page.screenshot({
+      path: `${dir}/grafico-evolucao-absoluto.png`,
+      fullPage: true,
+    });
+
+    await relativo.click();
+    await expect(relativo).toHaveAttribute("aria-pressed", "true");
+    await expect(grafico).toHaveAttribute("data-escala", "relativo");
 
     // Volta ao mapa, preservando o card.
     await botaoMapa.click();

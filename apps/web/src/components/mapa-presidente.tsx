@@ -484,18 +484,18 @@ export function MapaPresidente({
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5 @sm:flex-row @sm:items-center @sm:gap-1">
-          {visao === "mapa" ? (
-            <Segmented
-              value={escala}
-              onChange={setEscala}
-              label="Escala do mapa"
-              className="[&_button]:px-2 [&_button]:py-0.5 [&_button]:text-[11px] sm:[&_button]:px-2.5 sm:[&_button]:py-1 sm:[&_button]:text-xs"
-              options={[
-                { value: "relativo", label: "Relativo" },
-                { value: "absoluto", label: "Absoluto" },
-              ]}
-            />
-          ) : null}
+          <Segmented
+            value={escala}
+            onChange={setEscala}
+            // O mesmo controle vale para o mapa (diferença entre candidatos) e
+            // para o gráfico (domínio do eixo Y).
+            label={visao === "mapa" ? "Escala do mapa" : "Escala do gráfico"}
+            className="[&_button]:px-2 [&_button]:py-0.5 [&_button]:text-[11px] sm:[&_button]:px-2.5 sm:[&_button]:py-1 sm:[&_button]:text-xs"
+            options={[
+              { value: "relativo", label: "Relativo" },
+              { value: "absoluto", label: "Absoluto" },
+            ]}
+          />
           <Segmented
             value={visao}
             onChange={setVisao}
@@ -1258,6 +1258,7 @@ export function MapaPresidente({
           data={evolucao}
           carregando={evolucaoCarregando}
           erro={evolucaoErro}
+          escala={escala}
           candidatoA={candidatoA}
           candidatoB={candidatoB}
         />

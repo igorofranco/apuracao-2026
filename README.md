@@ -278,7 +278,9 @@ npm run check     # typecheck + lint + test
   O gráfico tem duas linhas (percentual dos votos válidos por candidato × tempo),
   é recortado no collector (início sem dados e repetição final omitidos), reduzido
   a `HISTORY_CHART_POINTS` e **cacheado no `RaceStore`** até chegar um snapshot
-  novo. O front busca o gráfico em paralelo ao resultado da apuração.
+  novo. O front busca o gráfico em paralelo ao resultado da apuração. A escala do
+  gráfico também alterna entre **relativa** (mín/máx dos dados) e **absoluta**
+  (eixo fixo de 0–100%).
   A home ocupa a viewport inteira, sem scroll,
   em qualquer tela: em **paisagem** (lado maior horizontal) o placar e o mapa
   ficam lado a lado; em **retrato** (lado maior vertical) o placar fica acima e

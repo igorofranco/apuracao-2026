@@ -16,6 +16,7 @@ import type {
   GraficoResponse,
 } from "@/lib/api";
 import type { CandidatoMapa } from "@/lib/mapa";
+import { dominioGrafico, type EscalaGrafico } from "@/lib/grafico";
 import { formatHora, formatPercent } from "@/lib/format";
 import { Skeleton } from "@/components/ui";
 import { cn } from "@/lib/utils";
@@ -102,6 +103,7 @@ export function GraficoEvolucao({
   data,
   carregando = false,
   erro = false,
+  escala,
   candidatoA,
   candidatoB,
   className,
@@ -109,6 +111,8 @@ export function GraficoEvolucao({
   data: GraficoResponse | undefined;
   carregando?: boolean;
   erro?: boolean;
+  /** Relativo: mín/máx dos dados; absoluto: 0–100%. */
+  escala: EscalaGrafico;
   candidatoA: CandidatoMapa;
   candidatoB: CandidatoMapa;
   className?: string;
@@ -142,6 +146,7 @@ export function GraficoEvolucao({
       <div
         data-testid="grafico-evolucao"
         data-estado="carregando"
+        data-escala={escala}
         className={base}
       >
         <Skeleton className="min-h-[10rem] w-full flex-1 rounded-xl" />
@@ -154,6 +159,7 @@ export function GraficoEvolucao({
       <div
         data-testid="grafico-evolucao"
         data-estado="erro"
+        data-escala={escala}
         className={cn(base, "items-center justify-center border border-dashed")}
       >
         <p className="text-center text-sm text-muted-foreground">
@@ -168,6 +174,7 @@ export function GraficoEvolucao({
       <div
         data-testid="grafico-evolucao"
         data-estado="vazio"
+        data-escala={escala}
         className={cn(base, "items-center justify-center border border-dashed")}
       >
         <div className="max-w-sm px-4 text-center">
@@ -186,16 +193,22 @@ export function GraficoEvolucao({
       .map((serie) => linha[serie.chave])
       .filter((valor): valor is number => typeof valor === "number"),
   );
-  const minValor = valores.length ? Math.min(...valores) : 0;
-  const maxValor = valores.length ? Math.max(...valores) : 100;
-  const margem = Math.max(1, (maxValor - minValor) * 0.18);
-  const min = Math.max(0, Math.floor(minValor - margem));
-  const max = Math.min(100, Math.ceil(maxValor + margem));
+  const [min, max] = dominioGrafico(valores, escala);
+  // Ticks explícitos: no relativo, eles acompanham exatamente o min/máx dos
+  // dados (sem o "nice ticks" do Recharts criar intervalos irregulares).
+  const ticksY = Array.from(
+    { length: 5 },
+    (_, indice) => min + ((max - min) * indice) / 4,
+  );
+  const casasEixo =
+    escala === "absoluto" ? 0 : max - min < 1 ? 2 : 1;
 
   return (
     <div
       data-testid="grafico-evolucao"
       data-estado="pronto"
+      data-escala={escala}
+      data-dominio={`${min}:${max}`}
       className={base}
       role="group"
       aria-label={`Evolução do percentual de votos de ${series
@@ -252,10 +265,10 @@ export function GraficoEvolucao({
             <YAxis
               stroke="var(--muted-foreground)"
               fontSize={11}
-              width={38}
+              width={50}
               domain={[min, max]}
-              tickCount={5}
-              tickFormatter={(valor: number) => `${valor}%`}
+              ticks={ticksY}
+              tickFormatter={(valor: number) => formatPercent(valor, casasEixo)}
               tickLine={false}
               axisLine={{ stroke: "var(--border)" }}
             />
