@@ -1,9 +1,10 @@
 # Apuração 2026
 
 Acompanhamento **em tempo real** da apuração das Eleições Gerais de 2026 com dados
-**oficiais e verificados** do TSE. O painel abre no **2º turno presidencial**
-(25/10/2026), com os dois candidatos em destaque; os demais cargos (Senador,
-Deputados e Governador) continuam acessíveis com os dados do turno correspondente.
+**oficiais e verificados** do TSE. O site tem **uma única página**: o **2º turno
+presidencial** (25/10/2026), com os dois candidatos em destaque e o mapa de
+apuração por município logo abaixo. O tema claro/escuro segue a configuração do
+dispositivo.
 
 - **Web**: Next.js 16 (App Router) + React 19 + Tailwind v4 + TanStack Query + Recharts.
 - **Collector**: worker Node 26 (Fastify) que faz polling dos arquivos do TSE, valida a
@@ -267,12 +268,12 @@ npm run check     # typecheck + lint + test
 
 ## Escopo atual
 
-- ✅ Presidente (Brasil) + Governador, Senador, Dep. Federal, Dep. Estadual/Distrital por UF.
-- ✅ Painel com mapa do Brasil (por partido líder), ranking e andamento por estado.
+- ✅ Página única (home), sem menu superior: destaque dos presidentes no 2º turno
+  e mapa de apuração por município.
+- ✅ Tema claro/escuro definido só por `prefers-color-scheme` (sem seletor e sem
+  `localStorage`).
 - ✅ Fotos oficiais dos candidatos no destaque presidencial, pelo `sqcand` do TSE
   (dados abertos `foto_cand2026_<UF>_div.zip`), com fallback para o número.
-- ✅ Evolução por candidato (% × tempo) no histórico, com recorte automático do
-  início sem dados e das repetições do início/fim (mostra só o trecho útil).
 - ✅ Mapa do Brasil do 2º turno (logo abaixo dos presidentes) mostrando **todos
   os municípios já na visão nacional**, cada um colorido pela própria votação.
   A escala **relativa** (padrão) normaliza entre os municípios do país; a
@@ -291,8 +292,7 @@ npm run check     # typecheck + lint + test
   `npm run geo:brasil -w @apuracao/web`. O dataset tem 5.564 municípios, dos
   quais 5.526 têm polígono válido (38 vêm com geometria vazia na fonte); os 7
   criados depois de 2022 não estão na malha.
-- ✅ Drill-down: UF → município → zona.
-- ✅ Tempo real via SSE; histórico e evolução temporal.
+- ✅ Tempo real via SSE (indicador “Ao vivo”).
 - ✅ 2º turno: painel inicial com os **dois candidatos à Presidência em destaque**
   ocupando a primeira seção (desktop e mobile), sem o painel de acompanhamento
   personalizado. Aceita a eleição oficial do 2º turno ou a projeção

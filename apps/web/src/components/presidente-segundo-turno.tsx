@@ -69,7 +69,7 @@ export function PresidenteSegundoTurno({
             <span className="hidden text-xs font-medium uppercase tracking-wide text-muted-foreground sm:inline">
               Eleições Gerais 2026
             </span>
-            <LiveBadge className="ml-auto sm:hidden" />
+            <LiveBadge className="ml-auto" />
           </div>
           <h1
             id="presidencia-titulo"

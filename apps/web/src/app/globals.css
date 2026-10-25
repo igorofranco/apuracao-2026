@@ -1,10 +1,13 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
-
 /* Celulares baixos (ex.: 667px de altura): compacta o que é secundário. */
 @custom-variant curta (@media (max-width: 639px) and (max-height: 700px));
 
+/*
+ * Tema claro/escuro segue exclusivamente a preferência do dispositivo
+ * (`prefers-color-scheme`). Não há classe `.dark` nem escolha salva: o CSS
+ * resolve tudo antes do primeiro paint.
+ */
 :root {
   --background: #f6f7fb;
   --foreground: #0b1220;
@@ -24,23 +27,25 @@
   color-scheme: light;
 }
 
-.dark {
-  --background: #070b16;
-  --foreground: #eef2f9;
-  --card: #0d1424;
-  --card-foreground: #eef2f9;
-  --muted: #141c2e;
-  --muted-foreground: #93a0b5;
-  --border: #1d2a44;
-  --primary: #22c98a;
-  --primary-foreground: #04130d;
-  --accent: #f2c14e;
-  --accent-foreground: #2a1f00;
-  --danger: #ff6b5e;
-  --info: #60a5fa;
-  --success: #34d399;
-  --ring: #22c98a;
-  color-scheme: dark;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #070b16;
+    --foreground: #eef2f9;
+    --card: #0d1424;
+    --card-foreground: #eef2f9;
+    --muted: #141c2e;
+    --muted-foreground: #93a0b5;
+    --border: #1d2a44;
+    --primary: #22c98a;
+    --primary-foreground: #04130d;
+    --accent: #f2c14e;
+    --accent-foreground: #2a1f00;
+    --danger: #ff6b5e;
+    --info: #60a5fa;
+    --success: #34d399;
+    --ring: #22c98a;
+    color-scheme: dark;
+  }
 }
 
 @theme inline {
@@ -97,7 +102,7 @@ body {
 
 /*
  * Home mobile em tela cheia (placar + mapa): o rodapé legal sairia da primeira
- * tela e forçaria scroll. Ele continua visível nas demais páginas.
+ * tela e forçaria scroll.
  */
 @media (max-width: 639px) {
   body:has([data-mobile-home]) footer {

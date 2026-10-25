@@ -20,8 +20,6 @@ interface Pagina {
   progresso?: boolean;
   aoVivo?: boolean;
   permitir404?: boolean;
-  /** Página com tabela de candidatos (cargo proporcional). */
-  tabela?: boolean;
 }
 
 const PAGINAS: Pagina[] = [
@@ -34,74 +32,11 @@ const PAGINAS: Pagina[] = [
     aoVivo: true,
   },
   {
-    name: "presidente",
-    path: "/presidente",
-    heading: /Disputa presidencial/,
-    texto: /seções totalizadas/i,
-    progresso: true,
-    aoVivo: true,
-  },
-  {
-    name: "uf-sp",
-    path: "/uf/sp",
-    heading: /São Paulo/,
-    texto: /Municípios/,
-    progresso: true,
-    aoVivo: true,
-  },
-  {
-    name: "municipio-sp",
-    path: "/uf/sp/71072",
-    heading: /São Paulo/,
-    texto: /Zonas eleitorais/,
-    progresso: true,
-    aoVivo: true,
-  },
-  {
-    name: "zona-sp",
-    path: "/uf/sp/71072/zona/1",
-    heading: /Zona 1/,
-    progresso: true,
-    aoVivo: true,
-  },
-  {
-    name: "uf-df",
-    path: "/uf/df",
-    heading: /Distrito Federal/,
-    texto: /Dep\. Distrital/,
-    progresso: true,
-    aoVivo: true,
-  },
-  {
-    name: "uf-sp-dep-federal",
-    path: "/uf/sp?cargo=6",
-    heading: /São Paulo/,
-    texto: /Deputado Federal/,
-    progresso: true,
-    aoVivo: true,
-    tabela: true,
-  },
-  {
-    name: "uf-df-dep-distrital",
-    path: "/uf/df?cargo=8",
-    heading: /Distrito Federal/,
-    texto: /Deputado Distrital/,
-    progresso: true,
-    aoVivo: true,
-    tabela: true,
-  },
-  {
     name: "nao-encontrado",
     path: "/rota-que-nao-existe",
     heading: /Página não encontrada/,
     aoVivo: false,
     permitir404: true,
-  },
-  {
-    name: "uf-invalida",
-    path: "/uf/zz",
-    texto: /UF inválida/,
-    aoVivo: false,
   },
 ];
 
@@ -215,18 +150,6 @@ test.describe("páginas", () => {
         await expect(
           page.getByText("Ao vivo").filter({ visible: true }).first(),
         ).toBeVisible({ timeout: 20_000 });
-      }
-      if (p.tabela) {
-        // Em telas pequenas a tabela dá lugar a uma lista, sem colunas cortadas.
-        const tabela = page.getByTestId("candidatos-tabela");
-        const lista = page.getByTestId("candidatos-lista");
-        if (testInfo.project.name === "desktop") {
-          await expect(tabela).toBeVisible();
-          await expect(lista).toBeHidden();
-        } else {
-          await expect(lista).toBeVisible();
-          await expect(tabela).toBeHidden();
-        }
       }
 
       // Deixa gráficos (Recharts) e transições assentarem antes da captura.
@@ -644,123 +567,70 @@ test.describe("tema", () => {
   // Simula um sistema operacional em modo escuro.
   test.use({ colorScheme: "dark" });
 
-  test("segue o sistema quando não há preferência salva", async ({ page }) => {
+  test("segue o sistema, sem botão e sem localStorage", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    // A classe vem do script inline no <head>, antes do primeiro paint.
-    await expect(page.locator("html")).toHaveClass(/dark/);
+    // O CSS resolve o tema antes do primeiro paint, só com o media query.
     await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+    await expect(page.locator("html")).not.toHaveClass(/dark/);
     await expect(
       page.getByRole("button", { name: "Alternar tema" }),
-    ).toBeVisible();
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(() => localStorage.getItem("apuracao-theme")),
+    ).toBeNull();
   });
 
-  test("preferência salva vence o sistema", async ({ page, context }) => {
+  test("ignora preferência salva no localStorage", async ({ page, context }) => {
     await context.addInitScript(() =>
       localStorage.setItem("apuracao-theme", "light"),
     );
     await page.goto("/", { waitUntil: "domcontentloaded" });
 
-    await expect(page.locator("html")).not.toHaveClass(/dark/);
+    // O dispositivo manda: o valor antigo do localStorage não tem efeito.
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+  });
+});
+
+test.describe("tema claro", () => {
+  test.use({ colorScheme: "light" });
+
+  test("segue o sistema claro", async ({ page }) => {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
   });
+});
 
-  test("alterna o tema e persiste a escolha", async ({ page }) => {
+test.describe("escopo", () => {
+  test("só tem a home: sem menu superior e sem as demais seções", async ({
+    page,
+  }) => {
+    const erros = monitorar(page, { permitir404: true });
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const html = page.locator("html");
-    const botao = page.getByRole("button", { name: "Alternar tema" });
 
-    // Começa escuro (sistema); o primeiro clique força o claro.
-    await expect(html).toHaveClass(/dark/);
-    await botao.click();
-    await expect(html).not.toHaveClass(/dark/);
-    await expect
-      .poll(() => page.evaluate(() => localStorage.getItem("apuracao-theme")))
-      .toBe("light");
+    // Menu superior removido por completo.
+    await expect(page.locator("header")).toHaveCount(0);
+    await expect(page.locator("nav")).toHaveCount(0);
 
-    await botao.click();
-    await expect(html).toHaveClass(/dark/);
-    await expect
-      .poll(() => page.evaluate(() => localStorage.getItem("apuracao-theme")))
-      .toBe("dark");
-  });
-});
+    // Apenas as duas seções permitidas.
+    await expect(page.getByTestId("presidente-segundo-turno")).toBeVisible();
+    await expect(page.getByTestId("mapa-presidente")).toBeVisible();
+    await expect(page.getByText("Governadores por estado")).toHaveCount(0);
+    await expect(page.getByText("Andamento por estado")).toHaveCount(0);
+    await expect(page.getByText("Governador por estado")).toHaveCount(0);
 
-test.describe("interações", () => {
-  test("troca de cargo na UF (SP)", async ({ page }, testInfo) => {
-    const erros = monitorar(page);
-
-    await page.goto("/uf/sp", { waitUntil: "domcontentloaded" });
-    await expect(
-      page.getByText("Ao vivo").filter({ visible: true }).first(),
-    ).toBeVisible({ timeout: 20_000 });
-
-    await page.getByRole("button", { name: "Senador" }).click();
-    await expect(page).toHaveURL(/cargo=5/);
-    await expect(
-      page.getByRole("heading", { name: "Senador" }).first(),
-    ).toBeVisible();
-
-    await page.waitForTimeout(500);
-    await semOverflowHorizontal(page);
-
-    const dir = `e2e/screenshots/${testInfo.project.name}`;
-    mkdirSync(dir, { recursive: true });
-    await page.screenshot({ path: `${dir}/uf-sp-senador.png`, fullPage: true });
-
-    expect(erros, erros.join("\n")).toEqual([]);
-  });
-
-  test("página do Presidente mantém o 2º turno em evidência", async ({ page }) => {
-    const erros = monitorar(page);
-
-    await page.goto("/presidente", { waitUntil: "domcontentloaded" });
-    await expect(
-      page.getByText("Ao vivo").filter({ visible: true }).first(),
-    ).toBeVisible({ timeout: 20_000 });
-
-    const heroes = page.getByTestId("presidente-segundo-turno");
-    await expect(heroes).toHaveCount(1, { timeout: 20_000 });
-    const hero = heroes.first();
-    await expect(hero).toHaveAttribute("data-turno", "2");
-    const cartoes = hero.getByTestId("candidato-destaque");
-    await expect(cartoes).toHaveCount(2, { timeout: 20_000 });
-    await expect(page.getByRole("progressbar").first()).toBeVisible();
-
-    // Sem votos no 2º turno: candidatos zerados e nenhuma apuração/evolução.
-    await expect(cartoes.getByText("0,0%")).toHaveCount(2);
-    await expect(hero.getByText("1º lugar")).toHaveCount(0);
-    await expect(page.locator(".recharts-line")).toHaveCount(0);
-
-    expect(erros, erros.join("\n")).toEqual([]);
-  });
-
-  test("destaca os dois candidatos do 2º turno (Governador SP)", async ({ page }, testInfo) => {
-    const erros = monitorar(page);
-
-    await page.goto("/uf/sp", { waitUntil: "domcontentloaded" });
-    await expect(
-      page.getByText("Ao vivo").filter({ visible: true }).first(),
-    ).toBeVisible({ timeout: 20_000 });
-
-    // No cenário do mock o Governador já está no 2º turno: aparece a faixa
-    // oficial e os dois candidatos ficam realçados.
-    await expect(page.getByTestId("segundo-turno")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId("segundo-turno")).toHaveAttribute(
-      "data-origem",
-      "oficial",
-    );
-    // Os dois classificados ficam realçados; o selo é só da faixa da seção.
-    await expect(
-      page.locator('[data-testid="candidate-bar"][data-segundo-turno]'),
-    ).toHaveCount(2);
-
-    await semOverflowHorizontal(page);
-
-    const dir = `e2e/screenshots/${testInfo.project.name}`;
-    mkdirSync(dir, { recursive: true });
-    await page.screenshot({ path: `${dir}/uf-sp-segundo-turno.png`, fullPage: true });
+    // Rotas antigas não existem mais.
+    for (const rota of [
+      "/presidente",
+      "/uf/sp",
+      "/uf/sp/71072",
+      "/uf/sp/71072/zona/1",
+    ]) {
+      const resposta = await page.goto(rota);
+      expect(resposta?.status(), rota).toBe(404);
+    }
 
     expect(erros, erros.join("\n")).toEqual([]);
   });
 });
+

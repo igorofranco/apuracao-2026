@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
-import { SiteHeader } from "@/components/site-header";
-import { TEMA_SCRIPT } from "@/lib/tema";
 
 export const metadata: Metadata = {
   title: "Apuração 2026 — Eleições em tempo real",
@@ -14,14 +12,9 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
-      <head>
-        {/* Aplica o tema antes do primeiro paint, sem flash claro. */}
-        <script dangerouslySetInnerHTML={{ __html: TEMA_SCRIPT }} />
-      </head>
+    <html lang="pt-BR">
       <body>
         <Providers>
-          <SiteHeader />
           <main className="mx-auto w-full max-w-6xl px-4 py-6">{children}</main>
           <footer className="mx-auto w-full max-w-6xl px-4 pb-10 pt-4 text-xs text-muted-foreground">
             <p>
