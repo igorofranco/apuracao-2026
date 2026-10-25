@@ -42,6 +42,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         resumoHistorico = null;
         void queryClient.invalidateQueries({ queryKey: ["resumo"] });
         void queryClient.invalidateQueries({ queryKey: ["historico"] });
+        void queryClient.invalidateQueries({ queryKey: ["grafico"] });
       }, 1_500);
     };
 

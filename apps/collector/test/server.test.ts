@@ -188,6 +188,108 @@ describe("collector HTTP", () => {
     await app.close();
   });
 
+  it("serve /api/grafico com o payload pronto do store", async () => {
+    const { app, store } = await montarApp();
+    store.setRace(
+      normalizeResultado(raw(1, "br", "10")),
+      "2026-10-25T19:00:00-03:00",
+    );
+    store.setRace(
+      normalizeResultado(raw(1, "br", "20")),
+      "2026-10-25T19:01:00-03:00",
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/grafico?eleicao=6257&cargo=1&uf=br",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      eleicao: 6257,
+      cargo: 1,
+      uf: "br",
+      candidatos: [{ numero: "22" }],
+      amostras: 2,
+    });
+    expect(Array.isArray(res.json().pontos)).toBe(true);
+    await app.close();
+  });
+
+  it("cacheia o gráfico até chegar um snapshot novo", async () => {
+    let historyCalls = 0;
+    const snapshots: Snapshot[] = [
+      {
+        eleicao: 6257,
+        cargo: 1,
+        uf: "br",
+        geracao: "g1",
+        capturadoEm: "2026-10-25T19:00:00-03:00",
+        percentualApurado: 10,
+        votosValidos: 100,
+        lider: null,
+        candidatos: [
+          {
+            numero: "22",
+            nomeUrna: "FULANO",
+            siglaPartido: "PL",
+            votos: 60,
+            percentual: 60,
+          },
+        ],
+      },
+      {
+        eleicao: 6257,
+        cargo: 1,
+        uf: "br",
+        geracao: "g2",
+        capturadoEm: "2026-10-25T19:01:00-03:00",
+        percentualApurado: 20,
+        votosValidos: 200,
+        lider: null,
+        candidatos: [
+          {
+            numero: "22",
+            nomeUrna: "FULANO",
+            siglaPartido: "PL",
+            votos: 100,
+            percentual: 50,
+          },
+        ],
+      },
+    ];
+    const repo: SnapshotRepository = {
+      save: () => {},
+      loadRecent: async () => [],
+      history: async () => {
+        historyCalls += 1;
+        return snapshots;
+      },
+    };
+    const store = new RaceStore({ snapshotLimit: 100, repo });
+    const options = { limit: 100, retentionDays: 7 };
+
+    await store.graficoAsync(6257, 1, "br", options);
+    await store.graficoAsync(6257, 1, "br", options);
+    expect(historyCalls).toBe(1);
+
+    // Snapshot novo invalida o cache.
+    store.setRace(
+      normalizeResultado(raw(1, "br", "10")),
+      "2026-10-25T19:02:00-03:00",
+    );
+    await store.graficoAsync(6257, 1, "br", options);
+    expect(historyCalls).toBe(2);
+
+    // Mesma assinatura não invalida.
+    store.setRace(
+      normalizeResultado(raw(1, "br", "10")),
+      "2026-10-25T19:03:00-03:00",
+    );
+    await store.graficoAsync(6257, 1, "br", options);
+    expect(historyCalls).toBe(2);
+  });
+
   it("responde 404 para corrida inexistente", async () => {
     const { app } = await montarApp();
     const res = await app.inject({

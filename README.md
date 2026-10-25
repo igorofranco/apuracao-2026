@@ -98,6 +98,7 @@ Copie `.env.example` e ajuste. As principais:
 | `REDIS_URL` | Habilita pub/sub (múltiplas instâncias) | — |
 | `DATABASE_URL` | Persiste snapshots (histórico durável) | — |
 | `HISTORY_RETENTION_DAYS` / `HISTORY_MAX_POINTS` | Retenção e limite de pontos do histórico | `7` / `5000` |
+| `HISTORY_CHART_POINTS` | Máximo de pontos no gráfico de evolução (reduzido no servidor) | `400` |
 | `API_PROXY_TARGET` | Alvo do proxy `/api` do Next (**build-time**) | `http://127.0.0.1:8787` |
 
 Sem Redis/Postgres o collector funciona normalmente com cache em memória
@@ -125,7 +126,8 @@ O `web` é stateless e escala horizontalmente sem configuração extra.
 | `GET /api/config` | UFs, cargos e identificadores da eleição |
 | `GET /api/resumo` | Resumo de todas as corridas (painel inicial) |
 | `GET /api/resultado?eleicao&cargo&uf[&municipio&zona]` | Resultado (store; município/zona usa cache TTL e busca no TSE) |
-| `GET /api/historico?eleicao&cargo&uf` | Snapshots (evolução temporal) |
+| `GET /api/historico?eleicao&cargo&uf` | Snapshots brutos (evolução temporal) |
+| `GET /api/grafico?eleicao&cargo&uf` | **Gráfico do 2º turno**: duas séries de percentual por candidato, já recortadas (sem início sem dados/fim repetido) e cacheadas no store |
 | `GET /api/municipios?eleicao&uf` | Municípios e zonas da UF |
 | `GET /api/presidente/municipios?eleicao&a&b` | **Snapshot nacional compacto** do 2º turno (`[cdi, uf, votosA, votosB]`), com ETag/cache/gzip |
 | `GET /api/presidente/municipios?eleicao&uf` | Snapshot detalhado de uma UF (compatibilidade/depuração) |
@@ -265,11 +267,23 @@ npm run check     # typecheck + lint + test
 - E2E/screenshots com Playwright: `npm run test:e2e -w @apuracao/web`. O mock
   reproduz o cenário real (0 voto no 2º turno); para pré-visualizar o mapa
   colorido antes da votação, rode o mock com `MOCK_RUNOFF_VOTOS=1`.
+  `e2e/layout.spec.ts` varre desktops, notebooks, tablets e celulares nas duas
+  orientações, garante que nada rola nem vaza da viewport e salva as capturas
+  das visões **mapa** e **gráfico** em `e2e/screenshots/layout/`.
 
 ## Escopo atual
 
 - ✅ Página única (home), sem menu superior: destaque dos presidentes no 2º turno
-  e mapa de apuração por município.
+  e uma seção que alterna entre **mapa** (padrão) e **gráfico** pelo mesmo card.
+  O gráfico tem duas linhas (percentual dos votos válidos por candidato × tempo),
+  é recortado no collector (início sem dados e repetição final omitidos), reduzido
+  a `HISTORY_CHART_POINTS` e **cacheado no `RaceStore`** até chegar um snapshot
+  novo. O front busca o gráfico em paralelo ao resultado da apuração.
+  A home ocupa a viewport inteira, sem scroll,
+  em qualquer tela: em **paisagem** (lado maior horizontal) o placar e o mapa
+  ficam lado a lado; em **retrato** (lado maior vertical) o placar fica acima e
+  o mapa abaixo. A tipografia e os detalhes se adaptam pela largura disponível
+  (container queries) e pela altura (celulares deitados).
 - ✅ Tema claro/escuro definido só por `prefers-color-scheme` (sem seletor e sem
   `localStorage`).
 - ✅ Fotos oficiais dos candidatos no destaque presidencial, pelo `sqcand` do TSE

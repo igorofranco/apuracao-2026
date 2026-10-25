@@ -66,6 +66,35 @@ export interface HistoricoResponse {
   snapshots: Snapshot[];
 }
 
+/** Candidato de uma linha do gráfico de evolução. */
+export interface GraficoCandidato {
+  numero: string;
+  nomeUrna: string;
+  siglaPartido: string;
+}
+
+/** Ponto do gráfico: percentual dos votos válidos por candidato. */
+export interface GraficoPonto {
+  em: string;
+  percentualApurado: number;
+  percentuais: Record<string, number | null>;
+}
+
+/**
+ * Gráfico de evolução já recortado e cacheado pelo collector: sem o início
+ * sem dados e sem a repetição final. O front só desenha as duas linhas.
+ */
+export interface GraficoResponse {
+  eleicao: number;
+  cargo: number;
+  uf: string;
+  candidatos: GraficoCandidato[];
+  pontos: GraficoPonto[];
+  recortado: boolean;
+  amostras: number;
+  atualizadoEm: string | null;
+}
+
 export interface MunicipiosResponse {
   eleicao: number;
   uf: string;
@@ -167,6 +196,10 @@ export const api = {
     params: Pick<ResultadoParams, "eleicao" | "cargo" | "uf">,
     signal?: AbortSignal,
   ) => getJson<HistoricoResponse>(`/api/historico${qs(params)}`, signal),
+  grafico: (
+    params: Pick<ResultadoParams, "eleicao" | "cargo" | "uf">,
+    signal?: AbortSignal,
+  ) => getJson<GraficoResponse>(`/api/grafico${qs(params)}`, signal),
   municipios: (
     params: { eleicao: number; uf: string },
     signal?: AbortSignal,

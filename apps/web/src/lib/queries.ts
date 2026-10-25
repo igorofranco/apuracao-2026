@@ -98,6 +98,24 @@ export function useHistorico(
   });
 }
 
+/**
+ * Gráfico de evolução do 2º turno. O collector devolve a série já recortada e
+ * cacheia o payload; o front dispara esta consulta junto com o resultado (não
+ * espera o resultado para pedir o gráfico) e só desenha quando o usuário troca
+ * a visão.
+ */
+export function useGrafico(
+  params: Pick<ResultadoParams, "eleicao" | "cargo" | "uf">,
+) {
+  return useQuery({
+    queryKey: ["grafico", params.eleicao, params.cargo, params.uf],
+    queryFn: ({ signal }) => api.grafico(params, signal),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+}
+
 export function useMunicipios(params: { eleicao: number; uf: string }) {
   return useQuery({
     queryKey: ["municipios", params.eleicao, params.uf],

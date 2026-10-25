@@ -312,11 +312,21 @@ test.describe("2º turno presidencial", () => {
       mapa.getByRole("heading", { name: "Mapa do 2º turno" }),
     ).toBeVisible();
 
-    // A seção fica logo abaixo do destaque dos presidentes.
+    // O mapa divide a tela com o destaque dos presidentes: ao lado em
+    // paisagem, logo abaixo em retrato.
     const hero = page.getByTestId("presidente-segundo-turno").first();
     const heroBox = await hero.boundingBox();
     const mapaBox = await mapa.boundingBox();
-    expect(mapaBox!.y).toBeGreaterThanOrEqual(heroBox!.y + heroBox!.height - 1);
+    const viewport = page.viewportSize()!;
+    if (viewport.width > viewport.height) {
+      expect(mapaBox!.x).toBeGreaterThanOrEqual(
+        heroBox!.x + heroBox!.width - 1,
+      );
+    } else {
+      expect(mapaBox!.y).toBeGreaterThanOrEqual(
+        heroBox!.y + heroBox!.height - 1,
+      );
+    }
 
     // Sem votos: mapa neutro + aviso de espera, sem inventar percentuais.
     await expect(mapa.getByTestId("mapa-presidente-vazio")).toBeVisible();
@@ -353,6 +363,81 @@ test.describe("2º turno presidencial", () => {
     const legenda = mapa.getByTestId("mapa-presidente-legenda");
     await expect(legenda.getByText("LULA")).toBeVisible();
     await expect(legenda.getByText("FLAVIO BOLSONARO")).toBeVisible();
+
+    expect(erros, erros.join("\n")).toEqual([]);
+  });
+
+  test("alterna entre mapa e gráfico no mesmo card", async ({
+    page,
+    context,
+  }, testInfo) => {
+    const erros = monitorar(page);
+    const pedidosGrafico: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/api/grafico")) pedidosGrafico.push(req.url());
+    });
+    // Votação simulada para o gráfico ter duas linhas com variação.
+    await context.addCookies([
+      { name: "mock_municipios", value: "1", url: "http://localhost:3000" },
+    ]);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+
+    // O gráfico é buscado já na carga, junto com a apuração, mesmo com o mapa
+    // como visão padrão (sem esperar o usuário trocar o switch).
+    await expect
+      .poll(() => pedidosGrafico.length, { timeout: 20_000 })
+      .toBeGreaterThan(0);
+    expect(pedidosGrafico[0]).toContain(
+      "/api/grafico?eleicao=6258&cargo=1&uf=br",
+    );
+
+    const mapa = await abrirMapaPresidente(page);
+    const botaoMapa = mapa.getByRole("button", { name: "Mapa" });
+    const botaoGrafico = mapa.getByRole("button", { name: "Gráfico" });
+
+    // O mapa é a visão prioritária (padrão).
+    await expect(mapa).toHaveAttribute("data-visao", "mapa");
+    await expect(botaoMapa).toHaveAttribute("aria-pressed", "true");
+    await expect(botaoGrafico).toHaveAttribute("aria-pressed", "false");
+    await expect(mapa.getByTestId("mapa-estados")).toBeVisible();
+
+    await botaoGrafico.click();
+    await expect(mapa).toHaveAttribute("data-visao", "grafico");
+    await expect(botaoGrafico).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      mapa.getByRole("heading", { name: "Evolução da apuração" }),
+    ).toBeVisible();
+    await expect(mapa.getByTestId("mapa-estados")).toHaveCount(0);
+    await expect(mapa.getByTestId("mapa-presidente-legenda")).toHaveCount(0);
+
+    // Duas linhas, uma por candidato, com os percentuais do último ponto.
+    const grafico = mapa.getByTestId("grafico-evolucao");
+    await expect(grafico).toHaveAttribute("data-estado", "pronto", {
+      timeout: 20_000,
+    });
+    await expect(grafico.locator(".recharts-line-curve")).toHaveCount(2, {
+      timeout: 20_000,
+    });
+    await expect(grafico.getByText("LULA")).toBeVisible();
+    await expect(grafico.getByText("FLAVIO BOLSONARO")).toBeVisible();
+    await expect(grafico.getByText("51,3%")).toBeVisible();
+    await expect(grafico.getByText("48,7%")).toBeVisible();
+
+    await semOverflowHorizontal(page);
+    await semRotulosCortados(page);
+    await page.addStyleTag({
+      content:
+        "*,*::before,*::after{animation:none!important;transition:none!important}",
+    });
+    const dir = `e2e/screenshots/${testInfo.project.name}`;
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({ path: `${dir}/grafico-evolucao.png`, fullPage: true });
+
+    // Volta ao mapa, preservando o card.
+    await botaoMapa.click();
+    await expect(mapa).toHaveAttribute("data-visao", "mapa");
+    await expect(mapa.getByTestId("mapa-estados")).toBeVisible();
+    await expect(botaoMapa).toHaveAttribute("aria-pressed", "true");
 
     expect(erros, erros.join("\n")).toEqual([]);
   });

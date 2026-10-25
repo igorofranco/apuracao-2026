@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { RaceResult, RaceSummary, Snapshot } from "@apuracao/domain";
 import { raceKey, summarizeRace, snapshotFrom, withEleicaoMatematica } from "@apuracao/domain";
+import { construirGrafico, type GraficoEvolucao } from "./grafico.ts";
 
 export interface RaceUpdate {
   key: string;
@@ -43,6 +44,11 @@ export class RaceStore extends EventEmitter {
   private readonly races = new Map<string, RaceResult>();
   private readonly signatures = new Map<string, string>();
   private readonly snapshots = new Map<string, Snapshot[]>();
+  /**
+   * Payload pronto do gráfico por corrida. É invalidado a cada snapshot novo e
+   * evita repetir a consulta ao Postgres + o recorte a cada requisição do front.
+   */
+  private readonly graficos = new Map<string, GraficoEvolucao>();
   private readonly updatedAt = new Map<string, string>();
   private readonly options: { snapshotLimit: number; repo?: SnapshotRepository };
 
@@ -66,6 +72,7 @@ export class RaceStore extends EventEmitter {
       list.push(snap);
       this.snapshots.set(key, list);
     }
+    this.graficos.clear();
   }
 
   setRace(race: RaceResult, at = new Date().toISOString()): RaceUpdate {
@@ -87,6 +94,7 @@ export class RaceStore extends EventEmitter {
         list.splice(0, list.length - this.options.snapshotLimit);
       }
       this.snapshots.set(key, list);
+      this.graficos.delete(key);
       void this.options.repo?.save(snap);
     }
 
@@ -141,10 +149,45 @@ export class RaceStore extends EventEmitter {
     return this.historico(eleicao, cargo, uf);
   }
 
+  /**
+   * Gráfico de evolução da corrida. O payload já vem recortado (sem o início
+   * sem dados e sem a repetição final) e reduzido em pontos; fica em memória
+   * até chegar um snapshot novo da mesma corrida.
+   */
+  async graficoAsync(
+    eleicao: number,
+    cargo: number,
+    uf: string,
+    options: {
+      limit: number;
+      retentionDays: number;
+      maxPontos?: number;
+    },
+  ): Promise<GraficoEvolucao> {
+    const key = raceKey({ eleicao, cargo, uf });
+    const cache = this.graficos.get(key);
+    if (cache) return cache;
+
+    const snapshots = await this.historicoAsync(eleicao, cargo, uf, {
+      limit: options.limit,
+      retentionDays: options.retentionDays,
+    });
+    const payload = construirGrafico(
+      { eleicao, cargo, uf },
+      snapshots,
+      { maxPontos: options.maxPontos },
+    );
+    this.graficos.set(key, payload);
+    return payload;
+  }
+
   /** Executa a retenção no repositório (se suportado). Retorna removidos. */
   async prune(retentionDays: number): Promise<number> {
     if (!this.options.repo?.prune) return 0;
-    return this.options.repo.prune(retentionDays);
+    const removidos = await this.options.repo.prune(retentionDays);
+    // O recorte depende da janela retida.
+    this.graficos.clear();
+    return removidos;
   }
 
   /** Maior timestamp de atualização conhecido (para /status). */

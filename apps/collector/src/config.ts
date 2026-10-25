@@ -74,6 +74,8 @@ export interface CollectorConfig {
     retentionDays: number;
     /** Máximo de pontos retornados por consulta de histórico. */
     maxPoints: number;
+    /** Máximo de pontos no gráfico de evolução (série reduzida no servidor). */
+    chartPoints: number;
     /** Intervalo de limpeza da retenção (ms). */
     pruneIntervalMs: number;
   };
@@ -124,6 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): CollectorConfi
     history: {
       retentionDays: int("HISTORY_RETENTION_DAYS", 7),
       maxPoints: int("HISTORY_MAX_POINTS", 5000),
+      chartPoints: int("HISTORY_CHART_POINTS", 400),
       pruneIntervalMs: int("HISTORY_PRUNE_INTERVAL_MS", 6 * 60 * 60 * 1000),
     },
     corsOrigins: lista("CORS_ORIGIN", ["http://localhost:3000"]),

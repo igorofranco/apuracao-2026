@@ -3,13 +3,14 @@
 import { useMemo } from "react";
 import { UFS } from "@apuracao/shared";
 import type { CandidateResult } from "@apuracao/domain";
-import { useEleicoes, useResumo, useResultado } from "@/lib/queries";
+import { useEleicoes, useGrafico, useResumo, useResultado } from "@/lib/queries";
 import { dataPresidencial } from "@/lib/eleicoes";
 import { PresidenteSegundoTurno } from "@/components/presidente-segundo-turno";
 import { MapaPresidente } from "@/components/mapa-presidente";
 import { Card } from "@/components/ui";
 import { corPartido, getPartido, type Espectro } from "@/lib/partidos";
 import { disputaPresidencialComFallback } from "@/lib/segundo-turno";
+import { cn } from "@/lib/utils";
 
 /** Ordem usada para escolher as pontas do gradiente (esquerda → direita). */
 const ORDEM_ESPECTRO: Espectro[] = [
@@ -30,6 +31,13 @@ export default function HomePage() {
   const eleicoes = useEleicoes();
   const resumo = useResumo();
   const presidente = useResultado({
+    eleicao: eleicoes.federal.cd,
+    cargo: 1,
+    uf: "br",
+  });
+  // Dispara junto com o resultado (não espera os candidatos): o gráfico já
+  // chega pronto do collector, que cacheia o payload recortado.
+  const grafico = useGrafico({
     eleicao: eleicoes.federal.cd,
     cargo: 1,
     uf: "br",
@@ -92,15 +100,16 @@ export default function HomePage() {
   }, [presidente.data, presidentePorUf, eleicoes.federal.turno]);
 
   return (
-    // No mobile a home é uma tela só: placar + mapa presidencial, sem scroll.
-    // (O `-my-6` cancela o padding vertical do <main> e o footer é ocultado
-    // pelo CSS quando este container está presente.)
+    // A home inteira cabe na viewport, sem scroll, em qualquer orientação:
+    // - paisagem (lado maior horizontal): placar e mapa lado a lado;
+    // - retrato (lado maior vertical): placar acima, mapa abaixo.
+    // O CSS de `[data-home]` remove o padding do <main> e oculta o rodapé.
     <div
-      data-mobile-home
-      className="space-y-8 max-sm:flex max-sm:h-svh max-sm:flex-col max-sm:gap-3 max-sm:space-y-0 max-sm:-my-6 max-sm:py-2"
+      data-home
+      className="relative flex h-full min-h-0 w-full flex-col gap-2 p-2 sm:gap-3 sm:p-3 paisagem:flex-row paisagem:gap-4 paisagem:p-4 micro:gap-2 micro:p-2"
     >
       {resumo.isError ? (
-        <Card className="p-4 text-sm text-muted-foreground max-sm:hidden">
+        <Card className="absolute left-1/2 top-2 z-20 w-[min(42rem,calc(100%-1rem))] -translate-x-1/2 p-3 text-sm text-muted-foreground shadow-lg">
           Não foi possível carregar os dados do TSE agora. O serviço de coleta pode estar
           reiniciando — os números aparecem assim que a conexão for restabelecida.
         </Card>
@@ -112,9 +121,16 @@ export default function HomePage() {
         turno={eleicoes.federal.turno}
         data={dataPresidencial(eleicoes)}
         mostrarLink={false}
+        className={cn(
+          "retrato:shrink-0 paisagem:min-h-0",
+          // Sem mapa (antes da disputa existir), o placar ocupa a tela toda.
+          mapaPresidente
+            ? "retrato:flex-none paisagem:w-[38%] paisagem:min-w-[19rem] paisagem:max-w-[44rem]"
+            : "flex-1",
+        )}
       />
 
-      {/* Heatmap do 2º turno por estado (logo abaixo dos presidentes) */}
+      {/* Heatmap do 2º turno por estado (ao lado em paisagem) */}
       {mapaPresidente ? (
         <MapaPresidente
           eleicao={eleicoes.federal.cd}
@@ -122,6 +138,10 @@ export default function HomePage() {
           candidatoA={mapaPresidente.candidatoA}
           candidatoB={mapaPresidente.candidatoB}
           carregando={resumo.isLoading}
+          evolucao={grafico.data}
+          evolucaoCarregando={grafico.isLoading}
+          evolucaoErro={grafico.isError}
+          className="min-h-0 min-w-0 flex-1"
         />
       ) : null}
     </div>

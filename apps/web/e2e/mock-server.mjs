@@ -643,6 +643,102 @@ function makeHistorico(eleicao, cargo, uf) {
   };
 }
 
+/**
+ * Espelha o `/api/grafico` do collector: duas linhas (os dois mais votados),
+ * sem o início sem dados e sem a repetição final. O recorte é feito aqui para
+ * os testes/screenshots refletirem o payload real do servidor.
+ */
+function makeGrafico(eleicao, cargo, uf) {
+  const { snapshots } = makeHistorico(eleicao, cargo, uf);
+  const vazio = (candidatos = []) => ({
+    eleicao,
+    cargo,
+    uf,
+    candidatos,
+    pontos: [],
+    recortado: snapshots.length > 0,
+    amostras: snapshots.length,
+    atualizadoEm: snapshots.at(-1)?.capturadoEm ?? null,
+  });
+
+  const uteis = snapshots.filter((s) =>
+    (s.candidatos ?? []).some((c) => c.votos > 0),
+  );
+  const ultimo = uteis.at(-1);
+  if (!ultimo) return vazio();
+
+  const candidatos = [...(ultimo.candidatos ?? [])]
+    .sort(
+      (a, b) =>
+        b.votos - a.votos || a.nomeUrna.localeCompare(b.nomeUrna, "pt-BR"),
+    )
+    .slice(0, 2)
+    .map((c) => ({
+      numero: c.numero,
+      nomeUrna: c.nomeUrna,
+      siglaPartido: c.siglaPartido,
+    }));
+  if (candidatos.length === 0) return vazio();
+
+  const assinatura = (snapshot) =>
+    candidatos
+      .map((c) => {
+        const encontrado = (snapshot.candidatos ?? []).find(
+          (x) => x.numero === c.numero,
+        );
+        return encontrado ? encontrado.percentual.toFixed(2) : "-";
+      })
+      .join("|");
+  const assinaturas = uteis.map(assinatura);
+
+  let primeiraMudanca = -1;
+  for (let i = 1; i < assinaturas.length; i++) {
+    if (assinaturas[i] !== assinaturas[i - 1]) {
+      primeiraMudanca = i;
+      break;
+    }
+  }
+  if (primeiraMudanca < 0) {
+    return { ...vazio(candidatos), recortado: true };
+  }
+
+  let ultimaMudanca = primeiraMudanca;
+  for (let i = assinaturas.length - 1; i > 0; i--) {
+    if (assinaturas[i] !== assinaturas[i - 1]) {
+      ultimaMudanca = i;
+      break;
+    }
+  }
+
+  const recortados = uteis.slice(
+    Math.max(0, primeiraMudanca - 1),
+    ultimaMudanca + 1,
+  );
+  const pontos = recortados.map((s) => ({
+    em: s.capturadoEm,
+    percentualApurado: s.percentualApurado,
+    percentuais: Object.fromEntries(
+      candidatos.map((c) => {
+        const encontrado = (s.candidatos ?? []).find(
+          (x) => x.numero === c.numero,
+        );
+        return [c.numero, encontrado?.percentual ?? null];
+      }),
+    ),
+  }));
+
+  return {
+    eleicao,
+    cargo,
+    uf,
+    candidatos,
+    pontos,
+    recortado: recortados.length < snapshots.length,
+    amostras: snapshots.length,
+    atualizadoEm: snapshots.at(-1)?.capturadoEm ?? null,
+  };
+}
+
 function buildResumo() {
   const corridas = [makeSummary(6258, 1, "br")];
   for (const u of UFS) {
@@ -703,7 +799,8 @@ const server = createServer((req, res) => {
     }
     const municipio = q.get("municipio") ?? undefined;
     const zona = q.get("zona") ?? undefined;
-    const chave = `${eleicao}:${cargo}:${uf}:${municipio ?? ""}:${zona ?? ""}`;
+    // A simulação por cookie não pode contaminar o cache de quem não pediu.
+    const chave = `${SIMULAR_VOTOS ? "sim" : "base"}:${eleicao}:${cargo}:${uf}:${municipio ?? ""}:${zona ?? ""}`;
     if (!RESULTADO_MEMO.has(chave)) {
       RESULTADO_MEMO.set(chave, makeRace({ eleicao, cargo, uf, municipio, zona }));
     }
@@ -715,6 +812,13 @@ const server = createServer((req, res) => {
     const cargo = Number(q.get("cargo") ?? 1);
     const uf = (q.get("uf") ?? "br").toLowerCase();
     return json(res, 200, makeHistorico(eleicao, cargo, uf));
+  }
+
+  if (path === "/api/grafico") {
+    const eleicao = Number(q.get("eleicao") ?? 6258);
+    const cargo = Number(q.get("cargo") ?? 1);
+    const uf = (q.get("uf") ?? "br").toLowerCase();
+    return json(res, 200, makeGrafico(eleicao, cargo, uf));
   }
 
   if (path === "/api/municipios") {

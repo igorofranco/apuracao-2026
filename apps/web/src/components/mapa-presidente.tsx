@@ -3,7 +3,9 @@
 import { useId, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Search, X } from "lucide-react";
 import { getUf } from "@apuracao/shared";
+import { GraficoEvolucao } from "@/components/grafico-evolucao";
 import { Progress, Segmented, Skeleton } from "@/components/ui";
+import type { GraficoResponse } from "@/lib/api";
 import {
   MAPA_VIEW,
   useBrasilGeo,
@@ -56,6 +58,9 @@ export function MapaPresidente({
   candidatoA,
   candidatoB,
   carregando = false,
+  evolucao,
+  evolucaoCarregando = false,
+  evolucaoErro = false,
   className,
 }: {
   /** Eleição presidencial atual (para o drill-down municipal). */
@@ -68,8 +73,15 @@ export function MapaPresidente({
   candidatoB: CandidatoMapa;
   /** Carregando o resumo por estado. */
   carregando?: boolean;
+  /** Série já recortada/cacheada pelo collector (visão Gráfico). */
+  evolucao?: GraficoResponse;
+  evolucaoCarregando?: boolean;
+  evolucaoErro?: boolean;
   className?: string;
 }) {
+  // O mapa é a visão prioritária; o gráfico é carregado em paralelo e só
+  // aparece quando o usuário troca o switch.
+  const [visao, setVisao] = useState<"mapa" | "grafico">("mapa");
   const [escala, setEscala] = useState<Escala>("relativo");
   const [modoCores, setModoCores] = useState<ModoCores>("neutro");
   const [ufSelecionada, setUfSelecionada] = useState<string | null>(null);
@@ -422,16 +434,18 @@ export function MapaPresidente({
       data-escala={escala}
       data-modo-cores={modoCores}
       data-uf={ufSelecionada ?? ""}
+      data-visao={visao}
       className={cn(
-        "rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6",
-        // Mobile: ocupa o restante da tela, com o mapa flexível no meio.
-        "max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col max-sm:p-3",
+        // O card é uma coluna: cabeçalho fixo, mapa flexível e uma faixa de
+        // legenda no rodapé. Assim o mapa usa toda a altura que sobrar, em
+        // qualquer orientação, sem empurrar a página para o scroll.
+        "@container flex min-h-0 flex-col rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4 micro:p-2",
         className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 max-sm:shrink-0 max-sm:gap-x-2 max-sm:gap-y-1">
-        <div className="min-w-0 max-sm:flex-1">
-          {ufSelecionada ? (
+      <div className="flex shrink-0 items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 flex-1">
+          {visao === "mapa" && ufSelecionada ? (
             <nav
               aria-label="Navegação do mapa"
               className="mb-1 flex items-center gap-1.5 text-xs"
@@ -451,43 +465,61 @@ export function MapaPresidente({
           ) : null}
           <h2
             id="mapa-presidente-titulo"
-            className="text-lg font-semibold sm:text-xl max-sm:text-sm"
+            className="text-sm font-semibold sm:text-lg"
           >
-            Mapa do 2º turno
+            {visao === "mapa" ? "Mapa do 2º turno" : "Evolução da apuração"}
           </h2>
-          {ufSelecionada ? (
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground max-sm:mt-0.5 max-sm:line-clamp-1 max-sm:text-[11px]">
+          {visao === "grafico" ? (
+            <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground sm:text-xs micro:hidden">
+              Percentual de votos por candidato ao longo do tempo.
+            </p>
+          ) : ufSelecionada ? (
+            <p className="mt-0.5 line-clamp-1 max-w-2xl text-[11px] text-muted-foreground @2xl:text-sm">
               {`Quem teve mais votos em cada município de ${nomeUf}, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}.`}
             </p>
           ) : (
-            // No mobile o texto explicativo sai da visão Brasil para o mapa
-            // ganhar altura; ao abrir uma UF ele volta (contexto do drill-down).
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground max-sm:hidden">
+            <p className="mt-0.5 hidden max-w-2xl text-sm text-muted-foreground @2xl:block">
               {`Quem teve mais votos em cada município, na disputa entre ${candidatoA.nomeUrna} e ${candidatoB.nomeUrna}. Clique em um estado para detalhar.`}
             </p>
           )}
         </div>
-        <Segmented
-          value={escala}
-          onChange={setEscala}
-          label="Escala do mapa"
-          className="max-sm:[&_button]:px-1.5"
-          options={[
-            { value: "relativo", label: "Relativo" },
-            { value: "absoluto", label: "Absoluto" },
-          ]}
-        />
+        <div className="flex shrink-0 flex-col items-end gap-1.5 @sm:flex-row @sm:items-center @sm:gap-1">
+          {visao === "mapa" ? (
+            <Segmented
+              value={escala}
+              onChange={setEscala}
+              label="Escala do mapa"
+              className="[&_button]:px-2 [&_button]:py-0.5 [&_button]:text-[11px] sm:[&_button]:px-2.5 sm:[&_button]:py-1 sm:[&_button]:text-xs"
+              options={[
+                { value: "relativo", label: "Relativo" },
+                { value: "absoluto", label: "Absoluto" },
+              ]}
+            />
+          ) : null}
+          <Segmented
+            value={visao}
+            onChange={setVisao}
+            label="Visão dos dados"
+            className="[&_button]:px-2 [&_button]:py-0.5 [&_button]:text-[11px] sm:[&_button]:px-2.5 sm:[&_button]:py-1 sm:[&_button]:text-xs"
+            options={[
+              { value: "mapa", label: "Mapa" },
+              { value: "grafico", label: "Gráfico" },
+            ]}
+          />
+        </div>
       </div>
 
-      <div
-        className="relative mt-4 w-full sm:max-w-sm max-sm:mt-2 max-sm:shrink-0 curta:hidden"
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) {
-            setBuscaAberta(false);
-          }
-        }}
-      >
-        <label htmlFor={idBusca} className="sr-only">
+      {visao === "mapa" ? (
+        <>
+          <div
+            className="relative mt-2 w-full shrink-0 sm:max-w-sm curta:hidden"
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setBuscaAberta(false);
+              }
+            }}
+          >
+            <label htmlFor={idBusca} className="sr-only">
           Buscar município
         </label>
         <div className="relative">
@@ -555,7 +587,7 @@ export function MapaPresidente({
                 cancelarBusca();
               }
             }}
-            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 max-sm:h-8"
+            className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60 max-sm:h-8 micro:h-7"
           />
           {busca || selecionado ? (
             <button
@@ -620,7 +652,7 @@ export function MapaPresidente({
       {selecionado ? (
         <div
           data-testid="municipio-selecionado-resumo"
-          className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs lg:hidden"
+          className="mt-2 flex shrink-0 items-center gap-2 rounded-lg border border-border bg-muted/40 px-2.5 py-1.5 text-xs sm:hidden"
         >
           <div className="min-w-0 flex-1">
             <p className="truncate">
@@ -649,19 +681,16 @@ export function MapaPresidente({
         </div>
       ) : null}
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start max-sm:mt-2 max-sm:flex max-sm:min-h-0 max-sm:flex-1 max-sm:flex-col max-sm:gap-2">
-        <div
-          ref={containerRef}
-          className="relative mx-auto w-full max-w-[600px] max-sm:min-h-0 max-sm:flex-1"
-        >
+      <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2 @5xl:flex-row @5xl:items-stretch">
+        <div ref={containerRef} className="relative min-h-0 w-full flex-1">
           {carregandoMapa ? (
-            <Skeleton className="aspect-square w-full rounded-xl max-sm:aspect-auto max-sm:h-full" />
+            <Skeleton className="h-full w-full rounded-xl" />
           ) : ufSelecionada ? (
             <svg
               data-testid="mapa-municipios"
               data-uf={ufSelecionada}
               viewBox={`0 0 ${MAPA_VIEW} ${MAPA_VIEW}`}
-              className="block h-auto w-full max-sm:h-full max-sm:min-h-0"
+              className="block h-full w-full"
               role="group"
               aria-label={`Mapa dos municípios de ${nomeUf} na votação do 2º turno`}
             >
@@ -749,7 +778,7 @@ export function MapaPresidente({
             <svg
               data-testid="mapa-estados"
               viewBox={`0 0 ${MAPA_VIEW} ${MAPA_VIEW}`}
-              className="block h-auto w-full max-sm:h-full max-sm:min-h-0"
+              className="block h-full w-full"
               role="group"
               aria-label="Mapa do Brasil com a votação de cada município no 2º turno; os estados são clicáveis para detalhar"
             >
@@ -994,7 +1023,7 @@ export function MapaPresidente({
 
         <aside
           className={cn(
-            "space-y-4 max-sm:shrink-0 max-sm:space-y-1.5",
+            "shrink-0 space-y-1.5 @5xl:w-[17rem]",
             // No drill-down mobile a legenda sai de cena: o mapa precisa da
             // altura toda para os municípios continuarem clicáveis.
             ufSelecionada && "max-sm:hidden",
@@ -1107,24 +1136,24 @@ export function MapaPresidente({
 
           <div
             data-testid="mapa-presidente-legenda"
-            className="border-t border-border pt-3 first:border-t-0 first:pt-0 max-sm:flex max-sm:items-center max-sm:gap-2 max-sm:border-0 max-sm:pt-1"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border pt-2 first:border-t-0 first:pt-0"
           >
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 max-sm:mb-0 max-sm:shrink-0 max-sm:gap-1 curta:hidden">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground max-sm:hidden">
+            <div className="flex shrink-0 items-center gap-1.5 curta:hidden micro:hidden">
+              <span className="hidden text-[10px] font-medium uppercase tracking-wide text-muted-foreground lg:inline">
                 Cores
               </span>
               <Segmented
                 value={modoCores}
                 onChange={setModoCores}
                 label="Cores do gradiente do mapa"
-                className="max-sm:[&_button]:px-1.5"
+                className="[&_button]:px-2 [&_button]:py-0.5 [&_button]:text-[10px] max-sm:[&_button]:px-1.5"
                 options={[
                   { value: "neutro", label: "Com neutro" },
                   { value: "direto", label: "Sem neutro" },
                 ]}
               />
             </div>
-            <div className="max-sm:min-w-0 max-sm:flex-1">
+            <div className="min-w-0 flex-1 sm:min-w-[16rem]">
               <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] font-medium">
                 <span
                   className="min-w-0 truncate"
@@ -1170,7 +1199,7 @@ export function MapaPresidente({
                 </span>
               </div>
             </div>
-            <p className="mt-2 text-xs text-muted-foreground max-sm:hidden">
+            <p className="mt-2 hidden text-xs text-muted-foreground detalhe-mapa:block">
               {escala === "relativo"
                 ? `Cada ${unidade} é comparado com os extremos ${onde}: o mais favorável a ${candidatoA.nomeUrna} fica na ponta vermelha e o mais favorável a ${candidatoB.nomeUrna} na ponta azul.`
                 : "A cor segue a diferença real entre os dois candidatos: empate no centro, 100% de um candidato na ponta."}
@@ -1179,12 +1208,12 @@ export function MapaPresidente({
                 : null}
             </p>
             {!ufSelecionada && usandoMunicipios ? (
-              <p className="mt-1 text-[10px] text-muted-foreground max-sm:hidden">
+              <p className="mt-1 hidden text-[10px] text-muted-foreground detalhe-mapa:block">
                 Municípios ainda sem dados aparecem com a cor do estado.
               </p>
             ) : null}
             {atualizadoColeta ? (
-              <p className="mt-1 text-[10px] text-muted-foreground max-sm:hidden">
+              <p className="mt-1 hidden text-[10px] text-muted-foreground detalhe-mapa:block">
                 Dados do TSE de {formatDateTime(atualizadoColeta)}
               </p>
             ) : null}
@@ -1193,7 +1222,7 @@ export function MapaPresidente({
           {temDados ? (
             <p
               data-testid="mapa-presidente-vitorias"
-              className="border-t border-border pt-3 text-xs text-muted-foreground max-sm:hidden"
+              className="border-t border-border pt-1.5 text-xs text-muted-foreground max-sm:hidden micro:hidden"
             >
               {candidatoA.nomeUrna} à frente em{" "}
               <span className="font-semibold text-foreground">{vitoriasA}</span>{" "}
@@ -1209,7 +1238,7 @@ export function MapaPresidente({
                 : ""}
             </p>
           ) : (
-            <p className="border-t border-border pt-3 text-xs text-muted-foreground max-sm:hidden">
+            <p className="border-t border-border pt-1.5 text-xs text-muted-foreground max-sm:hidden micro:hidden">
               {aguardandoLiberacao
                 ? "A coleta do 2º turno começa em 25/10 às 17h (Brasília)."
                 : coletando
@@ -1221,8 +1250,18 @@ export function MapaPresidente({
                       : "Nenhum voto computado no 2º turno ainda."}
             </p>
           )}
-        </aside>
-      </div>
+          </aside>
+        </div>
+        </>
+      ) : (
+        <GraficoEvolucao
+          data={evolucao}
+          carregando={evolucaoCarregando}
+          erro={evolucaoErro}
+          candidatoA={candidatoA}
+          candidatoB={candidatoB}
+        />
+      )}
     </section>
   );
 }

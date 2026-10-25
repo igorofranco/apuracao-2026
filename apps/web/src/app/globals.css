@@ -4,6 +4,26 @@
 @custom-variant curta (@media (max-width: 639px) and (max-height: 700px));
 
 /*
+ * Orientação da tela: a home escolhe o desenho pelo lado maior do viewport.
+ * Em paisagem (lado maior horizontal) o placar e o mapa ficam lado a lado; em
+ * retrato (lado maior vertical) o placar fica acima e o mapa abaixo.
+ */
+@custom-variant paisagem (@media (orientation: landscape));
+@custom-variant retrato (@media (orientation: portrait));
+/* Paisagem com altura de sobra (desktop/tablet deitado). */
+@custom-variant paisagem-alta (@media (orientation: landscape) and (min-height: 800px));
+/* Texto de apoio da legenda: só enquanto o mapa ocupa a largura toda. */
+@custom-variant detalhe-mapa (@media (orientation: landscape) and (min-height: 800px) and (max-width: 1759px));
+/* Celulares deitados: só o essencial cabe na altura. */
+@custom-variant micro (@media (max-height: 520px));
+
+/*
+ * Viewports baixos (notebooks de 720p e celulares deitados): esconde o que é
+ * secundário para o conteúdo principal continuar cabendo sem scroll.
+ */
+@custom-variant baixa (@media (max-height: 720px));
+
+/*
  * Tema claro/escuro segue exclusivamente a preferência do dispositivo
  * (`prefers-color-scheme`). Não há classe `.dark` nem escolha salva: o CSS
  * resolve tudo antes do primeiro paint.
@@ -101,11 +121,21 @@ body {
 }
 
 /*
- * Home mobile em tela cheia (placar + mapa): o rodapé legal sairia da primeira
- * tela e forçaria scroll.
+ * Home em tela única (placar + mapa), em qualquer orientação: ela ocupa
+ * exatamente a viewport. O rodapé legal sairia da primeira tela e forçaria
+ * scroll, então fica oculto; o padding padrão do <main> é removido e o
+ * espaçamento passa a ser controlado pelo próprio painel.
  */
-@media (max-width: 639px) {
-  body:has([data-mobile-home]) footer {
-    display: none;
-  }
+body:has([data-home]) {
+  overflow: hidden;
+}
+
+body:has([data-home]) main {
+  height: 100svh;
+  max-width: none;
+  padding: 0;
+}
+
+body:has([data-home]) footer {
+  display: none;
 }

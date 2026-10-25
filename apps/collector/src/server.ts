@@ -232,6 +232,23 @@ export async function buildServer(deps: ServerDeps): Promise<FastifyInstance> {
     return { eleicao, cargo, uf, snapshots };
   });
 
+  /**
+   * Gráfico de evolução do 2º turno: as duas linhas já vêm prontas (percentual
+   * por candidato ao longo do tempo), recortadas e reduzidas no servidor. O
+   * payload fica em cache no store até chegar um snapshot novo da corrida.
+   */
+  app.get("/api/grafico", async (req) => {
+    const q = query(req);
+    const eleicao = toInt(q.eleicao, deps.eleicoes.federal.cd);
+    const cargo = toInt(q.cargo, 1);
+    const uf = (q.uf ?? "br").toLowerCase();
+    return deps.store.graficoAsync(eleicao, cargo, uf, {
+      limit: deps.config.history.maxPoints,
+      retentionDays: deps.config.history.retentionDays,
+      maxPontos: deps.config.history.chartPoints,
+    });
+  });
+
   app.get("/api/municipios", async (req, reply) => {
     if (coletaBloqueada()) {
       return reply.code(503).send(respostaBloqueada);
